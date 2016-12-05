@@ -4,7 +4,104 @@ import numpy as np
 
 from sklearn.metrics import confusion_matrix
 
-from ..utensils.curve import CurveSliding
+from scipy.optimize import minimize
+
+
+class Curve:
+    """Class to treat a curve defined by a finite number ob (x, y) pairs
+    as a continious y=f(x).
+
+    Parameters
+    ----------
+    x : np.array, shape=(N)
+        X values.
+
+    y : np.array, shape=(N)
+        Y values.
+
+    mode : ['linear', 'hist'], optional (default='linear')
+        Mode in which the (x,y) are used to generate the curve:
+
+        hist = stepwise, only input y are possible returns when evaluted
+        linear = linear interpolation between neigbouring X values.
+    """
+    def __init__(self, x, y, mode='linear'):
+        order = np.argsort(x)
+        self.x = x[order]
+        self.y = y[order]
+        self.setup_curve(mode)
+
+    def setup_curve(self, mode):
+        if mode == 'hist':
+            self.evaluate = self.__eval_hist__
+            self.__setup_hist__()
+        if mode == 'linear':
+            self.evaluate = self.__eval_linear__
+            self.__setup_linear__()
+
+    def __call__(self, x):
+        return self.evaluate(x)
+
+    def __eval_linear__(self, x):
+        digitized = np.digitize(x, self.x)
+        return x * self.slope[digitized] + self.offset[digitized]
+
+    def __setup_linear__(self):
+        slope = (self.y[1:] - self.y[:-1]) / (self.x[1:] - self.x[:-1])
+        self.slope = np.zeros(len(self.x) + 1)
+        self.slope[1:-1] = slope
+        self.offset = np.hstack((self.y[0], self.y))
+        offset = self.y[:-1] - slope * self.x[:-1]
+        self.offset[1:-1] = offset
+
+    def __eval_hist__(self, x):
+        digitized = np.digitize(x, self.edges)
+        return self.y[digitized]
+
+    def __setup_hist__(self):
+        self.edges = (self.x[1:] + self.x[:-1]) / 2.
+
+
+class CurveSliding:
+    """Class to treat a curve defined by a finite number ob (x, y) pairs
+    as a continious y=f(x).
+
+    Parameters
+    ----------
+    edges : np.array, shape=(n_steps, 2)
+        Edges of the sliding windows:
+            lower edges := edges[:, 0]
+            upper edges := edges[:, 1]
+
+    y : np.array, shape=(n_steps)
+        Y values corresponding to the sliding windows.
+
+    mode : ['linear', 'hist'], optional (default='linear')
+        Mode in which the (x,y) are used to generate the curve:
+
+        hist = stepwise, only input y are possible returns when evaluted
+        linear = linear interpolation between neigbouring X values.
+    """
+    def __init__(self, edges, y, mode='linear'):
+        self.edges = edges
+        self.y = y
+        self.curve = self.setup_curve(mode)
+
+    def setup_curve(self, mode):
+        switch_points = np.sort(np.unique(self.edges))[:-1]
+        y_values = np.zeros_like(switch_points)
+        for i, x_i in enumerate(switch_points):
+            idx = np.logical_and(self.edges[:, 0] <= x_i,
+                                 self.edges[:, 1] > x_i)
+            y_values[i] = np.mean(self.y[idx])
+        return Curve(switch_points, y_values, mode=mode)
+
+    def evaluate(self, x):
+        return self.curve(x)
+
+    def __call__(self, x):
+        return self.evaluate(x)
+
 
 def purity_criteria(threshold=0.99):
     """Returns decisison function which returns if the desired purity
@@ -57,14 +154,16 @@ def purity_criteria(threshold=0.99):
             raise TypeError('Callable threshold must return float <= 1.')
         if float_criteria > 1.:
             raise ValueError('Callable threshold returned value > 1')
-        confusion_matrix = confusion_matrix(y_true,
-                                            y_pred,
-                                            sample_weight=sample_weights)
-        tp = confusion_matrix[1, 1]
-        fp = confusion_matrix[0, 1]
-        purity = tp / (tp + fp)
-        fulfilled = purity >= float_criteria
-        return fulfilled
+        conf_matrix = confusion_matrix(y_true,
+                                       y_pred,
+                                       sample_weight=sample_weights)
+        tp = conf_matrix[1, 1]
+        fp = conf_matrix[0, 1]
+        if tp + fp == 0:
+            purity = 0.
+        else:
+            purity = tp / (tp + fp)
+        return np.absolute(purity - float_criteria)
     return decision_function
 
 
@@ -219,18 +318,18 @@ class ConfidenceCutter(object):
             """
             h_width = self.window_size / 2.
             if self.positions is None:
-                assert X_o not None, 'If not positions are provided, the ' \
-                                     'the sliding windows has to be '\
-                                     'initiated with data (X_0 != None)'
+                assert X_o is not None, 'If not positions are provided, the ' \
+                                        'the sliding windows has to be '\
+                                        'initiated with data (X_0 != None)'
 
                 min_e = np.min(X_o)
                 max_e = np.max(X_o)
                 self.positions = np.linspace(min_e + h_width,
                                              max_e - h_width,
-                                             self.cut_opts.n_steps)
-            self.edges = np.zeros((n_steps, 2))
-            self.edges[:, 0] = initial_positions - h_width
-            self.edges[:, 1] = initial_positions + h_width
+                                             self.n_steps)
+            self.edges = np.zeros((self.n_steps, 2))
+            self.edges[:, 0] = self.positions - h_width
+            self.edges[:, 1] = self.positions + h_width
 
         def generate_cut_curve(self, cut_values):
             """Evaluating all cut values and edges.
@@ -315,16 +414,14 @@ class ConfidenceCutter(object):
             X = new_X
 
         n_events = X.shape[0]
-        self.cut_opts.init_sliding_windows(X[:, 1],
-                                                              sample_weight)
+        self.cut_opts.init_sliding_windows(X[:, 1], sample_weight)
         n_bootstraps = self.cut_opts.n_bootstraps
         if n_bootstraps is None or n_bootstraps <= 0:
             cut_values = self.__determine_cut_values__(
                 X, y, sample_weight)
         else:
-            cut_values = np.zeros((self.cut_opts.n_steps,
-                                                 n_bootstraps))
-            for i in range(n_boostraps):
+            cut_values = np.zeros((self.cut_opts.n_steps, n_bootstraps))
+            for i in range(self.cut_opts.n_bootstraps):
                 bootstrap = np.random.choice(n_events, n_events, replace=True)
                 bootstrap = np.sort(bootstrap)
                 X_i = X[bootstrap]
@@ -334,7 +431,7 @@ class ConfidenceCutter(object):
                 else:
                     sample_weight_i = sample_weight[bootstrap]
                 cut_values[:, i] = self.__determine_cut_values__(
-                    X,_i y_i, sample_weight_i)
+                    X_i, y_i, sample_weight_i)
         self.cut_opts.generate_cut_curve(cut_values)
         return self
 
@@ -348,31 +445,46 @@ class ConfidenceCutter(object):
             idx = np.logical_and(X_o >= lower, X_o < upper)
             confidence_i = X_c[idx]
             y_true_i = y_true[idx]
-            weight_i = None
+            weights_i = None
             if sample_weight is not None:
                 weights_i = sample_weight[idx]
 
-            possible_cuts = np.sort(np.unique(confidence_i))[::-1]
-            selected_cut = conf_cuts[0]
-            for cut_j in conf_cuts:
-                y_pred_i_j = confidence_i >= cut_j
-                if self.criteria(y_true_i,
-                                 y_pred_i_j,
-                                 position,
-                                 sample_weights=weights_i)
-                    selected_cut = cut_j
-                else:
-                    break
-            cut_values[i] = cut_j
+            def wrapped_decision_func(cut):
+                y_pred_i_j = np.array(confidence_i >= cut, dtype=int)
+                return self.criteria(y_true_i,
+                                     y_pred_i_j,
+                                     position,
+                                     sample_weights=weights_i)
+
+            possible_cuts = np.unique(confidence_i)
+            min_idx = min(possible_cuts, key=wrapped_decision_func)
+            cut_values[i] = min_idx
         return cut_values
 
     def get_params():
         pass
 
 
-if __name__ == '__test__':
+if __name__ == '__main__':
+    from test_conf_cutter import generate
+    from matplotlib import pyplot as plt
+    print('BLAKSJ')
+    purity = 0.9
+    x, y_pred, y_true = generate(10000, purity)
+    X = np.vstack((x, y_pred))
 
-
+    conf_cutter = ConfidenceCutter(n_steps=100,
+                                   window_size=0.3,
+                                   n_bootstraps=10,
+                                   criteria=purity_criteria(threshold=0.95),
+                                   conf_index=1)
+    conf_cutter.fit(X.T, y_true)
+    print(conf_cutter.cut_opts.positions)
+    X = np.linspace(-1., 1., 1000)
+    Y = conf_cutter.cut_opts.cut_curve(X)
+    plt.hexbin(y_pred, x, gridsize=30)
+    plt.plot(Y, X, color='k', lw='5')
+    plt.show()
 
 
 

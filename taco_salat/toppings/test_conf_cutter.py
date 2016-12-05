@@ -1,24 +1,24 @@
 import numpy as np
-from sympy import symbols, Integral
+from matplotlib import pyplot as plt
 
 
-def generate(n,
-             purity,
-             hit_point_func,
-             x_lims=[-1, 1],
-             sig_bkg_ratio=0.5,
-             sig_eff=0.8):
-
-    eff = 0.8
-    rho = 0.9
-    d_B = (hit_point * eff * rho) / (eff * rho + rho -1)
-    x_B = x_C + d_B
-    h_B = (eff * rho + rho -1) / (hit_point * (rho - 1))
-
-    A_B = d_B * h_B
-
-
+def generate(n, purity, x_lims=[-1., 1]):
+    d = (-1) * (0.5 * np.sqrt(1 - purity)) / (np.sqrt(1 - purity) - np.sqrt(2))
+    y = 2. / (0.5 + d)
+    x_c = 0.5 - d
+    a = y / (1 - (1 / x_c))
+    m = -a / x_c
+    r = np.random.uniform(size=n)
+    y_pred = (np.sqrt(a**2 + 2 * a * x_c * m +
+                      x_c**2 * m**2 + 2 * m * r) - a) / m
+    y_true = np.random.randint(0, 2, size=n)
+    idx = y_true == 0
+    y_pred[idx] = -(y_pred[idx] - 0.5) + 0.5
     x = np.random.uniform(x_lims[0], x_lims[1], n)
-    y_true = np.random.uniform(size=n)
-    y_true = np.array(np.random.uniform(size=n) <= sig_bkg_ratio, dtype=int)
+    return x, y_pred, y_true
 
+
+if __name__ == '__main__':
+    x, y_pred, y_true = generate(100000, 0.9)
+    plt.hist(y_pred, bins=101)
+    plt.show()

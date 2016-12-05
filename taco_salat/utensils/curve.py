@@ -5,6 +5,7 @@ as a continious y=f(x).
 """
 import numpy as np
 
+
 class Curve:
     """Class to treat a curve defined by a finite number ob (x, y) pairs
     as a continious y=f(x).
@@ -81,7 +82,6 @@ class CurveSliding:
         linear = linear interpolation between neigbouring X values.
     """
     def __init__(self, edges, y, mode='linear'):
-        order = np.argsort(x)
         self.edges = edges
         self.y = y
         self.curve = self.setup_curve(mode)
