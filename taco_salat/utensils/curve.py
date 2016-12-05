@@ -1,389 +1,60 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-import sys
-
+# -*- coding:utf-8 -*-
+"""
+Methods to treat a curve defined by a finite number ob (x, y) pairs
+as a continious y=f(x).
+"""
 import numpy as np
-import pandas as pd
-from sklearn.metrics import confusion_matrix
 
+class curve:
+    """Class to treat a curve defined by a finite number ob (x, y) pairs
+    as a continious y=f(x).
 
-def purity_criteria(threshold=0.99):
-    """Returns decisison function which returns if the desired purity
-    is fulfilled.
     Parameters
     ----------
-    threshold : float or callable
-        If float, independent from the positon of the window a constant
-        criteria, which has to be fulfilled for each windowd, is used.
-        If callable the function has to take the position and return a
-        criteria not greater than 1.
-    Returns
-    -------
-    decisison function : callable
-        Returns a func(y_true, y_pred, position, sample_weights=None)
-        returning 'fulfilled' which indicated if the desired purity is
-        fulfilled.
+    x : np.array, shape=(N)
+        X values.
+
+    y : np.array, shape=(N)
+        Y values.
+
+    mode : ['linear', 'hist'], optional (default='linear')
+        Mode in which the (x,y) are used to generate the curve:
+
+        hist = stepwise, only input y are possible returns when evaluted
+        linear = linear interpolation between neigbouring X values.
     """
-    if isinstance(threshold, float):
-        if threshold > 1.:
-            raise ValueError('Constant threshold must be <= 1')
-        threshold_func = lambda x: threshold
-    elif callable(threshold):
-        threshold_func = threshold
-    else:
-        raise TypeError('\'threshold\' must be either float or callable')
+    def __init__(self, x, y, mode='linear'):
+        order = np.argsort(x)
+        self.x = x[order]
+        self.y = y[order]
+        self.setup_curve(mode)
 
-    def decision_function(y_true, y_pred, position, sample_weights=None):
-        """Returns decisison function which returns if the desired purity
-        is fulfilled.
-        Parameters
-        ----------
-        y_true : 1d array-like
-            Ground truth (correct) target values. Only binary
-            classification is supported.
+    def setup_curve(self, mode):
+        if mode == 'hist':
+            self.evaluate = self.__eval_hist__
+            self.__setup_hist__()
+        if mode == 'linear':
+            self.evaluate = self.__eval_linear__
+            self.__setup_linear__()
 
-        y_pred : 1d array-like
-            Estimated targets.
+    def __call__(self, x):
+        return self.evaluate(x)
 
-        position : float
-            Value indicating the postion of the cut window.
+    def __eval_linear__(self, x):
+        digitized = np.digitize(x, self.x)
+        return x * self.slope[digitized] + self.offset[digitized]
 
-        Returns
-        -------
-        fulfilled : boolean
-            Return if the criteria is fulfilled.
-        """
-        float_criteria = threshold_func(position)
-        if not isinstance(float_criteria, float):
-            raise TypeError('Callable threshold must return float <= 1.')
-        if float_criteria > 1.:
-            raise ValueError('Callable threshold returned value > 1')
-        confusion_matrix = confusion_matrix(y_true,
-                                            y_pred,
-                                            sample_weight=sample_weights)
-        tp = confusion_matrix[1, 1]
-        fp = confusion_matrix[0, 1]
-        purity = tp / (tp + fp)
-        return purity >= float_criteria
-    return decision_function
+    def __setup_linear__(self):
+        slope = (self.y[1:] - self.y[:-1]) / (self.x[1:] - self.x[:-1])
+        self.slope = np.zeros(len(self.x) + 1)
+        self.slope[1:-1] = slope
+        self.offset = np.hstack((y[0], y))
+        offset = y[:-1] - slope * x[:-1]
+        self.offset[1:-1] = offset
 
+    def __eval_hist__(self, x):
+        digitized = np.digitize(x, self.edges)
+        return self.y[digitized]
 
-class ConfidenceCutter(object):
-    """Method to find a confidence (X_c) cut curve depended on a second
-    observable (X_o).
-
-    Parameters
-    ----------
-    window_size: float
-        Size of the sliding window
-
-    n_steps : integer, optional (default=1000)
-        Number of steps for the sliding window
-
-    n_bootstraps : integer (default=3)
-        Number of bootstraps. The curve is determined on n_boostraps
-        samples and averaged.
-
-    criteria : callable, optional (default=purity_criteria(threshold=0.99))
-        Funtion criteria(y_true, y_pred, position, sample_weights=None)
-        return True/False if the criteria is fulfilled.
-        See e.g. purity_criteria
-
-    positions : 1d array-lke, optional (default=None)
-        If no positions are provided n_steps equally distributed between
-        X_o min/max are used. The positions are mainly used for energy
-        dependent decision functions
-
-    conf_index : integer, optional (default=0)
-        Index of the confidence in the X [n_samples, 2] used in all
-        the functions. Default: X_c = X[:, 0] & X_o[:, 0]
-
-    Attributes
-    ----------
-    cut_opts : Object CutOpts
-        Container object containing all the options regarding the
-        liding window
-
-    criteria : callable
-        See Parameters criteria
-
-    conf_index : int or list
-        See Parameters conf_index"""
-    def __init__(self,
-                 n_steps=1000,
-                 window_size=0.1,
-                 n_bootstraps=3,
-                 criteria=purity_criteria(threshold=0.99),
-                 positions=None,
-                 conf_index=0):
-        self.cut_opts = self.CutOpts(n_steps=n_steps,
-                                     window_size=window_size,
-                                     n_bootstraps=n_bootstraps,
-                                     positions=positions)
-        self.criteria = criteria
-        self.conf_index = conf_index
-
-    class CutOpts(object):
-        """Class dealing with all settings of the sliding window.
-
-        Parameters
-        ----------
-        window_size: float
-            Size of the sliding window
-
-        n_steps : integer, optional (default=1000)
-            Number of steps for the sliding window
-
-        n_bootstraps : integer (default=3)
-            Number of bootstraps. The curve is determined on n_boostraps
-            samples and averaged.. The curve is determined on n_boostraps
-                samples and averaged.
-
-        criteria : callable, optional (default=purity_criteria(threshold=0.99))
-            Funtion criteria(y_true, y_pred, position, sample_weights=None)
-            return True/False if the criteria is fulfilled.
-            See e.g. purity_criteria
-
-        positions : 1d array-lke, optional (default=None)
-            If no positions are provided n_steps equally distributed between
-            X_o min/max are used.
-
-        position_type : ['mid', 'mean'], optional (default='mid')
-            Type of the postions to the windows. If positions are provided,
-            they are used to 'seed' the windows and for further calculations,
-            the postions are reevaluated according to the selected type.
-
-        Attributes
-        ----------
-        window_size: float
-            See Parameters window_size
-
-        n_steps : integer
-            See Parameters n_steps
-
-        n_bootstraps : integer
-            See Parameters n_bootstraps
-
-        criteria : callable
-            See Parameters criteria
-
-        positions : 1d array-lke
-            See Parameters positions
-
-        position_type : ['mid', 'mean']
-            See Parameters position_type
-            """
-        def __init__(self,
-                     n_steps=1000,
-                     window_size=0.1,
-                     n_bootstraps=10,
-                     positions=None,
-                     position_type='mid'):
-            self.n_steps = n_steps
-            self.n_bootstraps = n_bootstraps
-            self.window_size = window_size
-            self.edges = None
-            self.positions = positions
-            self.positions_type = positions_type
-            self.curve_points = None
-
-        def init_sliding_windows(self, X_o, sample_weight=None):
-            """Initilizes the sliding windows.
-
-            Uses the X_o values to determine the edges and the postions
-            of all the different windows. If positions were provided in
-            the __init__ method, those are used to determine the edges.
-            If not the windows are equally distributed between min(X_o)
-            and max(X_o). When the edges are set, the positions are
-            evaluated according to the position_type set in the
-            constructor.
-
-            Parameters
-            ----------
-            X_o : array-like, shape=(n_samples)
-                The input samples. 1d array with the X_o values.
-
-            sample_weight : array-like, shape=(n_samples)
-                The input samples. 1d array with the weights.
-
-            Returns
-            -------
-            edges : array of shape=(n_steps, 2)
-                Returns the edges of the sliding windows.
-                Lower edges = edges[:, 0]
-                Upper edges = edges[:, 1]
-
-            positions : array of shape=(n_steps)
-                Returns positions corresponding to the sliding windows.
-                See Paremeters positions_type for more infos.
-            """
-            if positions is None:
-                h_width = self.window_size / 2.
-                min_e = np.min(X_o)
-                max_e = np.max(X_o)
-                initial_positions = np.linspace(min_e + h_width,
-                                                max_e - h_width,
-                                                self.cut_opts.n_steps)
-            else:
-                initial_positions = self.positions
-            self.edges = np.zeros((n_steps, 2))
-            self.edges[:, 0] = initial_positions - h_width
-            self.edges[:, 1] = initial_positions + h_width
-            if self.positions_type == 'mid':
-                self.positions = initial_positions
-            elif self.positions_type == 'meam':
-                self.positions = np.zeros_like(initial_positions)
-                for i, [upper, lower] in enumerate(self.edges):
-                    idx = np.logical(X_o >= lower, X_o < upper)
-                    sel_x = X_o[idx]
-                    if sample_weight is not None:
-                        sel_w = sample_weight[idx]
-                    else:
-                        sel_w = None
-                    self.positions[i] = np.average(sel_x, weights=sel_w)
-        return self.edges, self.positions
-
-        def generate_cut_curve(self, cut_values):
-            """Evaluating all cut values and edges.
-
-            And generates the points of which the cut curve consists.
-            Mainly the overlapping of the different windows and the
-            averaging of multiple bootsstraps is handeled
-
-            Parameters
-            ----------
-            cut_values : array-like, shape=(n_steps, n_bootstraps)
-                cut_values for each window and bootstraps if
-                n_bootstraps > 1
-
-            Returns
-            -------
-            curve_values : 1-d array
-                Values defining the final cut curve
-            """
-            curve_edges = np.unique(self.edges)
-            curve_points = (curve_edges[1:] + curve_edges[:-1]) / 2.
-        return self.curve_values
-
-
-        def __process_cut_values(self, cut_values):
-
-
-
-
-            return curve_values
-
-
-
-
-    def predict(self, X):
-        """Predict class for X.
-        The predicted class of an input sample is a vote by the trees in
-        the forest, weighted by their probability estimates. That is,
-        the predicted class is the one with highest mean probability
-        estimate across the trees.
-        Parameters
-        ----------
-        X : array-like or sparse matrix of shape = [n_samples, n_features]
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
-        Returns
-        -------
-        y : array of shape = [n_samples] or [n_samples, n_outputs]
-            The predicted classes.
-        """
-        y_pred = np.zeros_like(X.shape[0], dtype=int)
-
-        return y_pred
-
-    def fit(self, X, y, sample_weight=None):
-        """Fit estimator.
-        Parameters
-        ----------
-        X : array-like shape=(n_samples, 2)
-            The input samples. With the confidence at index 'conf_index'
-            (default=0) and X_o as the other index.
-
-        y : array-like, shape=(n_samples)
-            The target values (class labels in classification,
-            possible_classed=[0, 1]).
-
-        sample_weight : array-like, shape=(n_samples) or None
-            Sample weights. If None, then samples are equally weighted.
-
-        Returns
-        -------
-        self : object
-            Returns self.
-        """
-        assert X.shape[1] == 2, 'X must have the shape (n_events, 2)'
-        assert len(y) == X.shape[0], 'len(X) and len(y) must be the same'
-        if sample_weight is not None:
-            assert len(y) == len(sample_weight), 'weights and y need the' \
-                'same length'
-
-        if self.conf_index == 1:
-            new_X = np.zeros_like(X)
-            new_X[:, 1] = X[:, 0]
-            new_X[:, 0] = X[:, 1]
-            X = new_X
-
-        n_events = X.shape[0]
-        edges, positions = self.cut_opts.init_sliding_windows(X[:, 1],
-                                                              sample_weight)
-        n_bootstraps = self.cut_opts.n_bootstraps
-        if n_bootstraps is None or n_bootstraps <= 0:
-            cut_values = self.__determine_cut_values__(
-                X, y, sample_weight)
-        else:
-            cut_values = np.zeros((self.cut_opts.n_steps,
-                                                 n_bootstraps))
-            for i in range(n_boostraps):
-                bootstrap = np.random.choice(n_events, n_events, replace=True)
-                bootstrap = np.sort(bootstrap)
-                X_i = X[bootstrap]
-                y_i = y[bootstrap]
-                if sample_weight is None:
-                    sample_weight_i = None
-                else:
-                    sample_weight_i = sample_weight[bootstrap]
-                cut_values[:, i] = self.__determine_cut_values__(
-                    X,_i y_i, sample_weight_i)
-        self.cut_opts.generate_cut_curve(cut_values)
-        return self
-
-    def __determine_cut_values__(self, X, y_true, sample_weight):
-        edges = self.cut_opts.edges
-        positions = self.cut_opts.positions
-        cut_values = np.zeros_like(positions)
-        X_o = X[:, 1]
-        X_c = X[:, 0]
-        for i, [[lower, upper], position] in enumerate(zip(edges, positions)):
-            idx = np.logical(X_o >= lower, X_o < upper)
-            sel_x = X_o[idx]
-            if sample_weight is not None:
-                sel_w = sample_weight[idx]
-            else:
-                sel_w = None
-            conf_cuts = np.sort(np.unique(X_c))[::-1]
-            for j, conf_cut in enumerate(conf_cuts):
-                y_pred = X_c >= conf_cut
-                if not self.criteria(y_true,
-                                     y_pred,
-                                     position,
-                                     sample_weights=sel_w):
-                    break
-            if j >= 1:
-                idx_selected_cut = -1
-            else:
-                idx_selected_cut = (i-1) * -1
-            cut_values[i] = conf_cuts[idx_selected_cut]
-        return cut_values
-
-    def get_params():
-        pass
-
-
+    def __setup_hist__(self):
+        self.edges = (self.x[1:] + self.x[:-1]) / 2.
