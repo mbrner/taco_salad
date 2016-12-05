@@ -4,7 +4,7 @@ import numpy as np
 
 from sklearn.metrics import confusion_matrix
 
-from ..utensils.curve import Curve
+from ..utensils.curve import CurveSliding
 
 def purity_criteria(threshold=0.99):
     """Returns decisison function which returns if the desired purity
@@ -63,7 +63,8 @@ def purity_criteria(threshold=0.99):
         tp = confusion_matrix[1, 1]
         fp = confusion_matrix[0, 1]
         purity = tp / (tp + fp)
-        return purity >= float_criteria
+        fulfilled = purity >= float_criteria
+        return fulfilled
     return decision_function
 
 
@@ -177,16 +178,16 @@ class ConfidenceCutter(object):
                      window_size=0.1,
                      n_bootstraps=10,
                      positions=None,
-                     position_type='mid'):
+                     curve_type='mid'):
             self.n_steps = n_steps
             self.n_bootstraps = n_bootstraps
             self.window_size = window_size
             self.edges = None
             self.positions = positions
-            self.positions_type = positions_type
-            self.curve_points = None
+            self.curve_type = curve_type
+            self.cut_curve = None
 
-        def init_sliding_windows(self, X_o, sample_weight=None):
+        def init_sliding_windows(self, X_o=None, sample_weight=None):
             """Initilizes the sliding windows.
 
             Uses the X_o values to determine the edges and the postions
@@ -216,31 +217,20 @@ class ConfidenceCutter(object):
                 Returns positions corresponding to the sliding windows.
                 See Paremeters positions_type for more infos.
             """
-            if positions is None:
-                h_width = self.window_size / 2.
+            h_width = self.window_size / 2.
+            if self.positions is None:
+                assert X_o not None, 'If not positions are provided, the ' \
+                                     'the sliding windows has to be '\
+                                     'initiated with data (X_0 != None)'
+
                 min_e = np.min(X_o)
                 max_e = np.max(X_o)
-                initial_positions = np.linspace(min_e + h_width,
-                                                max_e - h_width,
-                                                self.cut_opts.n_steps)
-            else:
-                initial_positions = self.positions
+                self.positions = np.linspace(min_e + h_width,
+                                             max_e - h_width,
+                                             self.cut_opts.n_steps)
             self.edges = np.zeros((n_steps, 2))
             self.edges[:, 0] = initial_positions - h_width
             self.edges[:, 1] = initial_positions + h_width
-            if self.positions_type == 'mid':
-                self.positions = initial_positions
-            elif self.positions_type == 'meam':
-                self.positions = np.zeros_like(initial_positions)
-                for i, [upper, lower] in enumerate(self.edges):
-                    idx = np.logical(X_o >= lower, X_o < upper)
-                    sel_x = X_o[idx]
-                    if sample_weight is not None:
-                        sel_w = sample_weight[idx]
-                    else:
-                        sel_w = None
-                    self.positions[i] = np.average(sel_x, weights=sel_w)
-        return self.edges, self.positions
 
         def generate_cut_curve(self, cut_values):
             """Evaluating all cut values and edges.
@@ -260,20 +250,10 @@ class ConfidenceCutter(object):
             curve_values : 1-d array
                 Values defining the final cut curve
             """
-            curve_edges = np.unique(self.edges)
-            curve_points = (curve_edges[1:] + curve_edges[:-1]) / 2.
-        return self.curve_values
-
-
-        def __process_cut_values(self, cut_values):
-
-
-
-
-            return curve_values
-
-
-
+            if self.n_bootstraps > 0:
+                cut_values = np.mean(cut_values, axis=1)
+            self.cut_curve = CurveSliding(self.edges, cut_values)
+            return self.cut_curve
 
     def predict(self, X):
         """Predict class for X.
@@ -283,17 +263,23 @@ class ConfidenceCutter(object):
         estimate across the trees.
         Parameters
         ----------
-        X : array-like or sparse matrix of shape = [n_samples, n_features]
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
+        X : array-like shape=(n_samples, 2)
+            The input samples. With the confidence at index 'conf_index'
+            (default=0) and X_o as the other index.
         Returns
         -------
-        y : array of shape = [n_samples] or [n_samples, n_outputs]
+        y_pred : array of shape = [n_samples]
             The predicted classes.
         """
-        y_pred = np.zeros_like(X.shape[0], dtype=int)
-
+        if self.conf_index == 1:
+            new_X = np.zeros_like(X)
+            new_X[:, 1] = X[:, 0]
+            new_X[:, 0] = X[:, 1]
+            X = new_X
+        X_o = X[:, 1]
+        X_c = X[:, 0]
+        thresholds = self.cut_opts.cut_curve(X_o)
+        y_pred = np.array(X_c >= thresholds, dtype=int)
         return y_pred
 
     def fit(self, X, y, sample_weight=None):
@@ -329,7 +315,7 @@ class ConfidenceCutter(object):
             X = new_X
 
         n_events = X.shape[0]
-        edges, positions = self.cut_opts.init_sliding_windows(X[:, 1],
+        self.cut_opts.init_sliding_windows(X[:, 1],
                                                               sample_weight)
         n_bootstraps = self.cut_opts.n_bootstraps
         if n_bootstraps is None or n_bootstraps <= 0:
@@ -359,28 +345,35 @@ class ConfidenceCutter(object):
         X_o = X[:, 1]
         X_c = X[:, 0]
         for i, [[lower, upper], position] in enumerate(zip(edges, positions)):
-            idx = np.logical(X_o >= lower, X_o < upper)
-            sel_x = X_o[idx]
+            idx = np.logical_and(X_o >= lower, X_o < upper)
+            confidence_i = X_c[idx]
+            y_true_i = y_true[idx]
+            weight_i = None
             if sample_weight is not None:
-                sel_w = sample_weight[idx]
-            else:
-                sel_w = None
-            conf_cuts = np.sort(np.unique(X_c))[::-1]
-            for j, conf_cut in enumerate(conf_cuts):
-                y_pred = X_c >= conf_cut
-                if not self.criteria(y_true,
-                                     y_pred,
-                                     position,
-                                     sample_weights=sel_w):
+                weights_i = sample_weight[idx]
+
+            possible_cuts = np.sort(np.unique(confidence_i))[::-1]
+            selected_cut = conf_cuts[0]
+            for cut_j in conf_cuts:
+                y_pred_i_j = confidence_i >= cut_j
+                if self.criteria(y_true_i,
+                                 y_pred_i_j,
+                                 position,
+                                 sample_weights=weights_i)
+                    selected_cut = cut_j
+                else:
                     break
-            if j >= 1:
-                idx_selected_cut = -1
-            else:
-                idx_selected_cut = (i-1) * -1
-            cut_values[i] = conf_cuts[idx_selected_cut]
+            cut_values[i] = cut_j
         return cut_values
 
     def get_params():
         pass
+
+
+if __name__ == '__test__':
+
+
+
+
 
 
