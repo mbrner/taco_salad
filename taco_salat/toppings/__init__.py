@@ -36,6 +36,9 @@ class ConfidenceCutter(object):
         Index of the confidence in the X [n_samples, 2] used in all
         the functions. Default: X_c = X[:, 0] & X_o[:, 0]
 
+    n_jobs : int, optinal (default=0)
+        Max number of jobs used for the bootstrap loop.
+
     Attributes
     ----------
     cut_opts : Object CutOpts
@@ -46,7 +49,12 @@ class ConfidenceCutter(object):
         See Parameters criteria
 
     conf_index : int or list
-        See Parameters conf_index"""
+        See Parameters conf_index
+
+    n_jobs : int
+        Max number of jobs used for the bootstrap loop.
+
+        """
     def __init__(self,
                  n_steps=1000,
                  window_size=0.1,

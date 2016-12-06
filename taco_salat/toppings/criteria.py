@@ -5,21 +5,20 @@ import numpy as np
 import numexpr as ne
 
 def purity_criteria(threshold=0.99):
-    """Returns decisison function which returns if the desired purity
-    is fulfilled.
+    """Returns decisison function which returns the absolute difference between the achieved and desired purity.
     Parameters
     ----------
     threshold : float or callable
         If float, independent from the positon of the window a constant
-        criteria, which has to be fulfilled for each windowd, is used.
+        criteria, which has to be fulfilled for each window, is used.
         If callable the function has to take the position and return a
         criteria not greater than 1.
     Returns
     -------
     decisison function : callable
         Returns a func(y_true, y_pred, position, sample_weights=None)
-        returning 'fulfilled' which indicated if the desired purity is
-        fulfilled.
+        returning 'difference' which is the absolute difference between
+        the achieved and desired purity
     """
     if isinstance(threshold, float):
         if threshold > 1.:
@@ -75,21 +74,32 @@ def purity_criteria(threshold=0.99):
 
 
 def general_confusion_matrix_criteria(eval_str, threshold=0.99):
-    """Returns decisison function which returns if the desired purity
-    is fulfilled.
+    """Returns decisison function which returns the absolute difference
+    the defined criteria and the threshold.
+
     Parameters
     ----------
+    eval_str: string
+        String for the criteria. The criteria is evaluated using
+        the numexpr module. Usable values are:
+            tp: True Positives
+            fp: False Positives
+            tn: True Negatives
+            fn: False Negatives
+        E.g.: Purity as the criteria: 'tp / (tp + fp)'
+
     threshold : float or callable
         If float, independent from the positon of the window a constant
-        criteria, which has to be fulfilled for each windowd, is used.
+        criteria, which has to be fulfilled for each window, is used.
         If callable the function has to take the position and return a
         criteria not greater than 1.
+
     Returns
     -------
     decisison function : callable
         Returns a func(y_true, y_pred, position, sample_weights=None)
-        returning 'fulfilled' which indicated if the desired purity is
-        fulfilled.
+        returning 'difference' which is the absolute difference between
+        the achieved and desired purity
     """
     if isinstance(threshold, float):
         if threshold > 1.:
@@ -170,7 +180,6 @@ def general_confusion_matrix_criteria(eval_str, threshold=0.99):
             else:
                 idx_fn = np.logical_and(y_true_bool, ~y_pred_bool)
                 fn = np.sum(sample_weights[idx_fn])
-        #cmd = 'criteria_value=%s' % eval_str
         criteria_value = ne.evaluate(eval_str)
         return np.absolute(criteria_value - float_criteria)
 
