@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 import numpy as np
 from . import criteria
@@ -258,50 +258,48 @@ class ConfidenceCutter(object):
         self.cut_opts.init_sliding_windows(X[:, 1], sample_weight)
         n_bootstraps = self.cut_opts.n_bootstraps
         if n_bootstraps is None or n_bootstraps <= 0:
-            cut_values = self.__determine_cut_values__(
+            cut_values = self.__determine_cut_values_mp__(
                 X, y, sample_weight)
         else:
-            cut_values = np.zeros((self.cut_opts.n_steps, n_bootstraps))
+            idx_bootstraps = []
+            cut_values = np.zeros((len(self.cut_opts.positions),
+                                        n_bootstraps))
             for i in range(self.cut_opts.n_bootstraps):
                 bootstrap = np.random.choice(n_events, n_events, replace=True)
-                bootstrap = np.sort(bootstrap)
-                X_i = X[bootstrap]
-                y_i = y[bootstrap]
-                if sample_weight is None:
-                    sample_weight_i = None
-                else:
-                    sample_weight_i = sample_weight[bootstrap]
-                cut_values[:, i] = self.__determine_cut_values_mp__(
-                    X_i, y_i, sample_weight_i)
+                idx_bootstraps.append(np.sort(bootstrap))
+            if self.n_jobs > 1:
+                n_jobs = min(self.n_jobs, self.cut_opts.n_bootstraps)
+                with ThreadPoolExecutor(max_workers=n_jobs) as executor:
+                    futures = []
+                    for bootstrap in idx_bootstraps:
+                        X_i = X[bootstrap]
+                        y_i = y[bootstrap]
+                        if sample_weight is None:
+                            sample_weight_i = None
+                        else:
+                            sample_weight_i = sample_weight[bootstrap]
+                        futures.append(executor.submit(
+                            self.__determine_cut_values_mp__,
+                            X=X_i,
+                            y_true=y_i,
+                            sample_weight=sample_weight_i))
+                    results = wait(futures)
+                for i, future_i in enumerate(results.done):
+                    cut_values[:, i] = future_i.result()
+            else:
+                for i, bootstrap in enumerate(idx_bootstraps):
+                    X_i = X[bootstrap]
+                    y_i = y[bootstrap]
+                    if sample_weight is None:
+                        sample_weight_i = None
+                    else:
+                        sample_weight_i = sample_weight[bootstrap]
+                    cut_values[:, i] = self.__determine_cut_values_mp__(
+                        X=X_i,
+                        y_true=y_i,
+                        sample_weight=sample_weight_i)
         self.cut_opts.generate_cut_curve(cut_values)
         return self
-
-    def __determine_cut_values__(self, X, y_true, sample_weight):
-        edges = self.cut_opts.edges
-        positions = self.cut_opts.positions
-        cut_values = np.zeros_like(positions)
-        X_o = X[:, 1]
-        X_c = X[:, 0]
-        for i, [[lower, upper], position] in enumerate(zip(edges, positions)):
-            idx = np.logical_and(X_o >= lower, X_o < upper)
-            confidence_i = X_c[idx]
-            y_true_i = y_true[idx]
-            weights_i = None
-            if sample_weight is not None:
-                weights_i = sample_weight[idx]
-
-            def wrapped_decision_func(cut):
-                y_pred_i_j = np.array(confidence_i >= cut, dtype=int)
-                return self.criteria(y_true_i,
-                                     y_pred_i_j,
-                                     position,
-                                     sample_weights=weights_i)
-
-            possible_cuts = np.unique(confidence_i)
-            min_idx = min(possible_cuts, key=wrapped_decision_func)
-            cut_values[i] = min_idx
-        return cut_values
-
 
     def __find_best_cut__(self, i, lower, upper, position,
                           X, y_true, sample_weight, n_points=10):
@@ -323,24 +321,12 @@ class ConfidenceCutter(object):
                                  position,
                                  sample_weights=weights_i)
 
-        cut_value = self.__find_best_cut_2__(wrapped_decision_func,
+        cut_value = self.__find_best_cut_inner__(wrapped_decision_func,
                                              possible_cuts,
                                              n_points=n_points)
         return cut_value
 
-    def __find_best_cut_list__(self, arg):
-        i=arg[0]
-        lower=arg[1]
-        upper=arg[2]
-        position=arg[3]
-        X=arg[4]
-        y_true=arg[5]
-        sample_weight=arg[6]
-        n_points=arg[7]
-        return self.__find_best_cut__(i, lower, upper, position,
-                                      X, y_true, sample_weight, n_points)
-
-    def __find_best_cut_2__(self, eval_func, conf, n_points=100):
+    def __find_best_cut_inner__(self, eval_func, conf, n_points=100):
         n_confs = len(conf)
         step_width = int(n_confs / (n_points - 1))
         if step_width == 0:
@@ -362,7 +348,7 @@ class ConfidenceCutter(object):
                 conf = conf[idx[idx_min - 1]:]
             else:
                 conf = conf[idx[idx_min - 1]:idx[idx_min + 1]]
-            return self.__find_best_cut_2__(eval_func, conf, n_points)
+            return self.__find_best_cut_inner__(eval_func, conf, n_points)
 
     def __determine_cut_values_mp__(self, X, y_true, sample_weight):
         edges = self.cut_opts.edges
@@ -371,27 +357,15 @@ class ConfidenceCutter(object):
         X_o = X[:, 1]
         X_c = X[:, 0]
         n_points = 5
-        if self.n_jobs > 1:
-            tasks = []
-            for i, [[lower, upper], position] in enumerate(zip(edges,
-                                                               positions)):
-                tasks.append([i, lower, upper, position,
-                              X, y_true, sample_weight, n_points])
-            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
-                chunksize = int(len(tasks) / self.n_jobs)
-                cut_values = executor.map(self.__find_best_cut_list__,
-                                          tasks,
-                                          chunksize=chunksize)
-                cut_values = np.array([cut_i for cut_i in cut_values])
-        else:
-            cut_values = np.zeros_like(positions)
-            for i, [[lower, upper], position] in enumerate(zip(edges,
-                                                               positions)):
-                cut_value = self.__find_best_cut__(i, lower, upper, position,
-                                                   X, y_true, sample_weight,
-                                                   n_points=n_points)
 
-                cut_values[i] = cut_value
+        cut_values = np.zeros_like(positions)
+        for i, [[lower, upper], position] in enumerate(zip(edges,
+                                                           positions)):
+            cut_value = self.__find_best_cut__(i, lower, upper, position,
+                                               X, y_true, sample_weight,
+                                               n_points=n_points)
+
+            cut_values[i] = cut_value
         return cut_values
 
 
