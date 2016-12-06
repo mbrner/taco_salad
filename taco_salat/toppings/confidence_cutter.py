@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 
 from sklearn.metrics import confusion_matrix
 
 from scipy.optimize import minimize
 
+from IPython import embed
 
 class Curve:
     """Class to treat a curve defined by a finite number ob (x, y) pairs
@@ -154,16 +157,23 @@ def purity_criteria(threshold=0.99):
             raise TypeError('Callable threshold must return float <= 1.')
         if float_criteria > 1.:
             raise ValueError('Callable threshold returned value > 1')
-        conf_matrix = confusion_matrix(y_true,
-                                       y_pred,
-                                       sample_weight=sample_weights)
-        tp = conf_matrix[1, 1]
-        fp = conf_matrix[0, 1]
+        y_true_bool = np.array(y_true, dtype=bool)
+        y_pred_bool = np.array(y_pred, dtype=bool)
+        if sample_weights is None:
+            tp = np.sum(y_true_bool[y_pred_bool])
+            fp = np.sum(~y_true_bool[y_pred_bool])
+        else:
+            idx_tp = np.logical_and(y_true_bool, y_pred_bool)
+            idx_fp = np.logical_and(~y_true_bool, y_pred_bool)
+            tp = np.sum(sample_weights[idx_tp])
+            fp = np.sum(sample_weights[idx_fp])
         if tp + fp == 0:
             purity = 0.
         else:
             purity = tp / (tp + fp)
         return np.absolute(purity - float_criteria)
+
+
     return decision_function
 
 
@@ -214,13 +224,15 @@ class ConfidenceCutter(object):
                  n_bootstraps=3,
                  criteria=purity_criteria(threshold=0.99),
                  positions=None,
-                 conf_index=0):
+                 conf_index=0,
+                 n_jobs=0):
         self.cut_opts = self.CutOpts(n_steps=n_steps,
                                      window_size=window_size,
                                      n_bootstraps=n_bootstraps,
                                      positions=positions)
         self.criteria = criteria
         self.conf_index = conf_index
+        self.n_jobs = n_jobs
 
     class CutOpts(object):
         """Class dealing with all settings of the sliding window.
@@ -430,7 +442,7 @@ class ConfidenceCutter(object):
                     sample_weight_i = None
                 else:
                     sample_weight_i = sample_weight[bootstrap]
-                cut_values[:, i] = self.__determine_cut_values__(
+                cut_values[:, i] = self.__determine_cut_values_mp__(
                     X_i, y_i, sample_weight_i)
         self.cut_opts.generate_cut_curve(cut_values)
         return self
@@ -461,6 +473,100 @@ class ConfidenceCutter(object):
             cut_values[i] = min_idx
         return cut_values
 
+
+    def __find_best_cut__(self, i, lower, upper, position,
+                          X, y_true, sample_weight, n_points=10):
+        X_o = X[:, 1]
+        X_c = X[:, 0]
+        idx = np.logical_and(X_o >= lower, X_o < upper)
+        confidence_i = X_c[idx]
+        y_true_i = y_true[idx]
+        weights_i = None
+        if sample_weight is not None:
+            weights_i = sample_weight[idx]
+
+        possible_cuts = np.sort(np.unique(confidence_i))
+
+        def wrapped_decision_func(cut):
+            y_pred_i_j = np.array(confidence_i >= cut, dtype=int)
+            return self.criteria(y_true_i,
+                                 y_pred_i_j,
+                                 position,
+                                 sample_weights=weights_i)
+
+        cut_value = self.__find_best_cut_2__(wrapped_decision_func,
+                                             possible_cuts,
+                                             n_points=n_points)
+        return cut_value
+
+    def __find_best_cut_list__(self, arg):
+        i=arg[0]
+        lower=arg[1]
+        upper=arg[2]
+        position=arg[3]
+        X=arg[4]
+        y_true=arg[5]
+        sample_weight=arg[6]
+        n_points=arg[7]
+        return self.__find_best_cut__(i, lower, upper, position,
+                                      X, y_true, sample_weight, n_points)
+
+    def __find_best_cut_2__(self, eval_func, conf, n_points=100):
+        n_confs = len(conf)
+        step_width = int(n_confs / (n_points - 1))
+        if step_width == 0:
+            final = True
+            selected_cuts = conf
+        else:
+            final = False
+            idx = [(i * step_width) for i in range(n_points)]
+            idx[-1 ] = n_confs -1
+            selected_cuts = conf[idx]
+        criteria_values = [eval_func(cut) for cut in selected_cuts]
+        idx_min = np.argmin(criteria_values)
+        if final:
+            return selected_cuts[idx_min]
+        else:
+            if idx_min == 0:
+                conf = conf[:idx[idx_min + 1]]
+            elif idx_min == n_points - 1:
+                conf = conf[idx[idx_min - 1]:]
+            else:
+                conf = conf[idx[idx_min - 1]:idx[idx_min + 1]]
+            return self.__find_best_cut_2__(eval_func, conf, n_points)
+
+    def __determine_cut_values_mp__(self, X, y_true, sample_weight):
+        edges = self.cut_opts.edges
+        positions = self.cut_opts.positions
+
+        X_o = X[:, 1]
+        X_c = X[:, 0]
+        n_points = 5
+        if self.n_jobs > 1:
+            tasks = []
+            for i, [[lower, upper], position] in enumerate(zip(edges,
+                                                               positions)):
+                tasks.append([i, lower, upper, position,
+                              X, y_true, sample_weight, n_points])
+            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+                chunksize = int(len(tasks) / self.n_jobs)
+                cut_values = executor.map(self.__find_best_cut_list__,
+                                          tasks,
+                                          chunksize=chunksize)
+                cut_values = np.array([cut_i for cut_i in cut_values])
+        else:
+            cut_values = np.zeros_like(positions)
+            for i, [[lower, upper], position] in enumerate(zip(edges,
+                                                               positions)):
+                cut_value = self.__find_best_cut__(i, lower, upper, position,
+                                                   X, y_true, sample_weight,
+                                                   n_points=n_points)
+
+                cut_values[i] = cut_value
+        return cut_values
+
+
+
     def get_params():
         pass
 
@@ -468,7 +574,6 @@ class ConfidenceCutter(object):
 if __name__ == '__main__':
     from test_conf_cutter import generate
     from matplotlib import pyplot as plt
-    print('BLAKSJ')
     purity = 0.9
     x, y_pred, y_true = generate(10000, purity)
     X = np.vstack((x, y_pred))
@@ -477,9 +582,9 @@ if __name__ == '__main__':
                                    window_size=0.3,
                                    n_bootstraps=10,
                                    criteria=purity_criteria(threshold=0.95),
-                                   conf_index=1)
+                                   conf_index=1,
+                                   n_jobs=0)
     conf_cutter.fit(X.T, y_true)
-    print(conf_cutter.cut_opts.positions)
     X = np.linspace(-1., 1., 1000)
     Y = conf_cutter.cut_opts.cut_curve(X)
     plt.hexbin(y_pred, x, gridsize=30)
