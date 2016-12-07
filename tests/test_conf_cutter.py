@@ -120,7 +120,7 @@ if __name__ == '__main__':
         if x < -0.9:
             y = 0.5
         elif x < -0.1:
-            y = (np.sin((x+0.9)/0.8*2*np.pi)) / 4. + .5
+            y = (np.sin((x+0.9)/0.8*2*np.pi)) / 3. + .5
         elif x < 0.:
             y = 0.5
         elif x < 0.5:
@@ -167,22 +167,96 @@ if __name__ == '__main__':
 
     plt.hexbin(y_pred, x, gridsize=50, cmap=plt.cm.viridis)
     plt.plot(y_cut_true, x_cut_true, '-', color='0.5', lw=5,
-             label='90% Purity (ToyMC Input)')
+             label='ToyMC Input')
     plt.plot(y_cut_curve, x_cut_curve, '--', color='w', lw=5,
-             label='90% Purity (Confidence Cutter)')
+             label='Confidence Cutter')
     plt.xlabel('Classifier Score')
     plt.ylabel('Observable')
-    plt.legend(loc='best')
+    plt.legend(loc='best', title='Purity 90%')
     plt.xlim([0.,1.])
     plt.ylim([-1, 1])
     plt.savefig('conf_cutter_proof.png', dpi=200)
+    plt.clf()
+    conf_cutter.save_curve('test_curve')
 
-    x, y_pred, y_true = generate_x(10000, eff, pur, conf_cut_func)
-    X = np.vstack((x, y_pred)).T
     y_pred_conf = conf_cutter.predict(X)
+    y_true_bool = np.array(y_true, dtype=bool)
+    y_pred_bool = np.array(y_pred_conf, dtype=bool)
+    tp = np.sum(y_true_bool[y_pred_bool])
+    fp = np.sum(~y_true_bool[y_pred_bool])
+    print('Achieved Purity on a Train sample:')
+    print(tp / (tp + fp))
+    print('True Positive Rate:')
+    print(tp / np.sum(y_true_bool))
+    del conf_cutter
+
+
+    conf_cutter_reloaded = ConfidenceCutter(curve_file='test_curve')
+    x, y_pred, y_true = generate_x(100000, eff, pur, conf_cut_func)
+
+    conf_cutter_reloaded.conf_index = 0
+    X = np.vstack((y_pred, x)).T
+    y_pred_conf = conf_cutter_reloaded.predict(X)
     y_true_bool = np.array(y_true, dtype=bool)
     y_pred_bool = np.array(y_pred_conf, dtype=bool)
     tp = np.sum(y_true_bool[y_pred_bool])
     fp = np.sum(~y_true_bool[y_pred_bool])
     print('Achieved Purity on a Test sample:')
     print(tp / (tp + fp))
+    print('True Positive Rate:')
+    print(tp / np.sum(y_true_bool))
+
+
+
+    pur_crit = criteria.purity_criteria(threshold=0.90)
+    conf_cutter_reloaded.criteria = pur_crit
+    naive_cut = conf_cutter_reloaded.__find_best_cut__(0, -1, 1, 0,
+                          X, y_true, None, n_points=10)
+
+    y_true_bool = np.array(y_true, dtype=bool)
+    y_pred_bool = np.array(y_pred >= naive_cut, dtype=bool)
+    tp = np.sum(y_true_bool[y_pred_bool])
+    fp = np.sum(~y_true_bool[y_pred_bool])
+    print('Achieved Purity for naive cut:')
+    print(tp / (tp + fp))
+    print('True Positive Rate:')
+    print(tp / np.sum(y_true_bool))
+
+    x_curves = np.linspace(-1, 1, 1000)
+    y_cut_true = np.array([conf_cut_func(x_i) for x_i in x_curves])
+    y_cut_curve = conf_cutter_reloaded.cut_opts.cut_curve(x_curves)
+    y_naive_cut = np.ones_like(x_curves) * naive_cut
+
+
+    plt.hexbin(y_pred, x, gridsize=50, cmap=plt.cm.plasma)
+    plt.plot(y_cut_true, x_curves, '-', color='0.5', lw=5,
+             label='ToyMC Input')
+    plt.plot(y_cut_curve, x_curves, '--', color='w', lw=5,
+             label='Confidence Cutter')
+
+    plt.plot(y_naive_cut, x_curves, '--', color='r', lw=5,
+             label='Straight Cut')
+    plt.xlabel('Classifier Score')
+    plt.ylabel('Observable')
+    plt.legend(loc='best', title='Purity 90%')
+    plt.xlim([0.,1.])
+    plt.ylim([-1, 1])
+    plt.savefig('conf_cutter_reloaded.png', dpi=200)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

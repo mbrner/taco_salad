@@ -39,6 +39,9 @@ class ConfidenceCutter(object):
     n_jobs : int, optinal (default=0)
         Max number of jobs used for the bootstrap loop.
 
+    curve_file : str, optional (default=None)
+        File from which a fitted cut curve should be loaded.
+
     Attributes
     ----------
     cut_opts : Object CutOpts
@@ -62,14 +65,48 @@ class ConfidenceCutter(object):
                  criteria=criteria.purity_criteria(threshold=0.99),
                  positions=None,
                  conf_index=0,
-                 n_jobs=0):
+                 n_jobs=0,
+                 curve_file=None):
         self.cut_opts = self.CutOpts(n_steps=n_steps,
                                      window_size=window_size,
                                      n_bootstraps=n_bootstraps,
                                      positions=positions)
+
         self.criteria = criteria
         self.conf_index = conf_index
         self.n_jobs = n_jobs
+        if curve_file is not None:
+            self.load_curve(curve_file)
+
+    def save_curve(self, filename):
+        """Function to save a fitted curve. 'numpy.savez' is used to
+        store the curve. If the filename doesn't end with '.npz' it is
+        added.
+
+        Parameters
+        ----------
+        filename: str
+            Path where the curve is saved.
+        """
+        cut_curve = self.cut_opts.cut_curve
+        np.savez(filename, edges=cut_curve.edges,
+                           y=cut_curve.y,
+                           conf_index=self.conf_index)
+
+    def load_curve(self, filename):
+        """Function to load a fitted curve.
+
+        Parameters
+        ----------
+        filename: str
+            Path from which the curve is loaded.
+        """
+        if not filename.endswith('.npz'):
+            filename += '.npz'
+        npzfile = np.load(filename)
+        curve = CurveSliding(npzfile['edges'], npzfile['y'])
+        self.cut_opts.cut_curve = curve
+        self.conf_index = int(npzfile['conf_index'])
 
     class CutOpts(object):
         """Class dealing with all settings of the sliding window.
@@ -120,7 +157,7 @@ class ConfidenceCutter(object):
 
         position_type : ['mid', 'mean']
             See Parameters position_type
-            """
+        """
         def __init__(self,
                      n_steps=1000,
                      window_size=0.1,

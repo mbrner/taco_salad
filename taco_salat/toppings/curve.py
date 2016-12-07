@@ -33,7 +33,7 @@ class Curve:
         self.y = y[order]
         self.setup_curve(mode)
 
-    def setup_curve(self, mode):
+    def setup_curve(self, mode='linear'):
         if mode == 'hist':
             self.evaluate = self.__eval_hist__
             self.__setup_hist__()
@@ -87,9 +87,10 @@ class CurveSliding:
     def __init__(self, edges, y, mode='linear'):
         self.edges = edges
         self.y = y
+        self.mode = mode
         self.curve = self.setup_curve(mode)
 
-    def setup_curve(self, mode):
+    def setup_curve(self, mode='linear'):
         switch_points = np.sort(np.unique(self.edges))[:-1]
         y_values = np.zeros_like(switch_points)
         for i, x_i in enumerate(switch_points):
