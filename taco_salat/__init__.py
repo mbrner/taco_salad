@@ -7,15 +7,15 @@ class TacoSalat(object):
 
     Parameters
     ----------
-    label_factorty: instance of utensils.LabelFactory
+    ingredients : list of column names or int
         Instance of LabelFactory used to generate Label from the Data.
 
     Attributes
     ----------
 
     """
-    def __init__(self, label_factory):
-        self.label_factory = label_factory
+    def __init__(self, ingredients):
+        self.recipe = []
 
     def fit(X, y, sample_weights=None):
         raise NotImplementedError
@@ -34,4 +34,6 @@ class TacoSalat(object):
 
     def predict_proba_df(df):
         raise NotImplementedError
+
+    def add_layer(self, name):
 
