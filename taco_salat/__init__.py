@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from innards import Recipe
+from .innards import Recipe
 
-class TacoSalat(object):
+class TacoSalat(Recipe):
     """Base Class providing an interface to stack classification layers.
 
     Parameters
@@ -21,29 +21,29 @@ class TacoSalat(object):
                  labels=[],
                  weights=[],
                  misc=[]):
-        self.recipe = Recipe()
+        super(TacoSalat, self).__init__()
         if df is not None and roles is not None:
             columns = list(df.columns)
             for name, role in zip(columns, roles):
                 if role in [0, 1, 2, 3]:
-                    self.recipe.add_ingredient(unique_name=name,
+                    self.add_ingredient(unique_name=name,
                                                name_layer=name,
                                                role=role)
         else:
             for att in attributes:
-                self.recipe.add_ingredient(unique_name=att,
+                self.add_ingredient(unique_name=att,
                                            name_layer=att,
                                            role=0)
             for label in labels:
-                self.recipe.add_ingredient(unique_name=att,
+                self.add_ingredient(unique_name=att,
                                            name_layer=att,
                                            role=1)
-            for misc_i in misc_i:
-                self.recipe.add_ingredient(unique_name=att,
+            for misc_i in misc:
+                self.add_ingredient(unique_name=att,
                                            name_layer=att,
                                            role=3)
             for weight_i in weights:
-                self.recipe.add_ingredient(unique_name=weight_i,
+                self.add_ingredient(unique_name=weight_i,
                                            name_layer=weight_i,
                                            role=2)
 
