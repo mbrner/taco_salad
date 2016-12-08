@@ -145,7 +145,6 @@ class Recipe(object):
             return df[[att]]
         else:
             idx = df.long_name.apply(fnmatch, pat=att)
-            print(idx)
             return df[idx]
 
     def rename_ingredients(self, col, old_name, new_name):
