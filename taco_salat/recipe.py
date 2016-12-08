@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 from fnmatch import fnmatch
-from .component import Component
-from .layer import Layer
+from component import BaseComponent
+from layer import BaseLayer
 
 
 class Recipe(object):
@@ -26,22 +26,13 @@ class Recipe(object):
                                                  'role'])
         self.layer_dict = {}
         self.n_layers = 0
-        self.base_layer = self.add_layer(
-            name='layer0',
-            comment='Layer for all initial ingredients.')
-        self.base_layer.add_component(
-            name='input',
-            comment='Present in the input.')
 
-    def add_layer(self, name=None, comment=''):
-        if name is None:
-            name = 'layer{}'.format(self.n_layers)
-        assert name not in self.layer_dict.keys(), \
+    def add_layer(self, layer):
+        assert layer.name not in self.layer_dict.keys(), \
             '{} already exists'.format(name)
-        self.layer_dict[name] = Layer(name=name,
-                                      comment=comment)
+        self.layer_dict[layer.name] = layer
         self.n_layers += 1
-        return self.layer_dict[name]
+        return self.layer_dict[layer.name]
 
     def get_layer(self, name):
         if isinstance(name, int):
@@ -50,7 +41,7 @@ class Recipe(object):
         return self.layer_dict[name]
 
     def rename_layer(self, layer, new_name):
-        if not isinstance(layer, Layer):
+        if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
         assert new_name not in self.layer_dict.keys(), \
             '{} already exists'.format(new_name)
@@ -61,23 +52,18 @@ class Recipe(object):
         layer.name = new_name
         self.rename_ingredients('layer', old_name, new_name)
 
-
-
-    def add_component(self, layer, name=None, comment='', **kwargs):
-        if not isinstance(layer, Layer):
+    def add_component(self, layer, component):
+        if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
-        if name is None:
-            layer_id = layer.n_components
-            name = 'component{}'.format(layer_id)
-        return layer.add_component(name=name)
+        return layer.add_component(component)
 
     def get_component(self, layer, name):
-        if not isinstance(layer, Layer):
+        if not isinstance(layer, BaseLayer):
             layer = self.get_layer(name)
         return layer[name]
 
     def rename_component(self, layer, component, new_name):
-        if not isinstance(layer, Layer):
+        if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
         old_name = layer.rename_component(component, new_name)
 
@@ -122,10 +108,10 @@ class Recipe(object):
         assert unique_name not in df.index, \
             '{} already exists'.format(unique_name)
 
-        if not isinstance(layer, Layer):
+        if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
 
-        if not isinstance(component, Component):
+        if not isinstance(component, BaseComponent):
             component = self.get_component(layer, component)
 
         if name_layer is None:
@@ -172,31 +158,32 @@ class Recipe(object):
 
 
 if __name__ == '__main__':
+    from IPython import embed
     r = Recipe()
-    family_layer = r.add_layer('Familie')
-    eltern = r.add_component(family_layer, 'Eltern')
-    geschwister = r.add_component(family_layer, 'Geschwister')
+
+
+    family_layer = BaseLayer('Familie')
+    r.add_layer(family_layer)
+    eltern = BaseComponent('Eltern')
+    r.add_component(family_layer, eltern)
+    geschwister = BaseComponent('Geschwister')
+    r.add_component(family_layer, geschwister)
     r.add_ingredient('Horst', family_layer, eltern, 'Vater')
     r.add_ingredient('Marie', 'Familie', 'Eltern', 'Mutter')
     r.add_ingredient('Anna', 'Familie', geschwister, 'Schwester')
     r.add_ingredient('Lukas', family_layer, 'Geschwister', 'Bruder')
 
-    friends_layer = r.add_layer('friends')
-    inner_circle_friends = r.add_component(friends_layer, 'inner_circle')
+    friends_layer = BaseLayer('Friends')
+    r.add_layer(friends_layer)
+
+    inner_circle_friends = BaseComponent('inner_circle')
+    inner_circle_friends = r.add_component(friends_layer, inner_circle_friends)
     r.add_ingredient('Hanne', friends_layer, inner_circle_friends, 'Freundin')
     r.add_ingredient('Peter', friends_layer, inner_circle_friends)
     r.add_ingredient('Hansi', friends_layer, inner_circle_friends)
 
-    kollegen_layer = r.add_layer()
-    uni = r.add_component(kollegen_layer)
+    print(r.ingredients)
 
-    r.add_ingredient('Wolfgang', kollegen_layer, uni)
-    print(r.ingredients)
-    r.rename_layer(kollegen_layer, 'Kollegen')
-    print('.............')
-    r.rename_component(kollegen_layer, uni, 'Uni')
-    print(r.ingredients)
-    print(r.get('Familie*'))
 
 
 

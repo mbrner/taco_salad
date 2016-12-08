@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from recipe import Recipe
+from .recipe import Recipe
 
 class TacoSalat(Recipe):
     """Base Class providing an interface to stack classification layers.
@@ -47,6 +47,32 @@ class TacoSalat(Recipe):
                                            name_layer=weight_i,
                                            role=2)
 
+    def add_component(self,
+                      layer
+                      name=None,
+                      clf=None,
+                      attributes=None,
+                      label=None,
+                      returns=None,
+                      weight=None,
+                      comment=''):
+        long_name_attributes = []
+        for att in attributes:
+            selected_att = self.get(att)
+
+
+
+
+
+
+        component = super(TacoSalat, self).add_component(layer=layer,
+                                                         name=name,
+                                                         comment=comment)
+
+
+
+
+
 
     def fit_df(df, type_col='Type', weight_col='Weight'):
         raise NotImplementedError
@@ -72,4 +98,13 @@ class TacoSalat(Recipe):
 
     def predict_proba(X):
         raise NotImplementedError
+
+    def add_component(self,
+                      name,
+                      clf=None,
+                      attributes=None,
+                      label=None,
+                      returns=None,
+                      weight=None,
+                      comment=')
 
