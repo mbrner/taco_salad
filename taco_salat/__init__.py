@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from .innards import Recipe
+from recipe import Recipe
 
 class TacoSalat(Recipe):
     """Base Class providing an interface to stack classification layers.
