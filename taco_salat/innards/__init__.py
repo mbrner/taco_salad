@@ -2,43 +2,8 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 from fnmatch import fnmatch
-
-class Component(object):
-    def __init__(self, name, comment='', **kwargs):
-        self.name = name
-        self.comment = comment
-        self.component_dict = {}
-
-
-class Layer(object):
-    def __init__(self, name, comment=''):
-        self.name = name
-        self.comment = comment
-        self.component_dict = {}
-        self.n_components = 0
-
-    def add_component(self, name, comment='', **kwargs):
-        assert name not in self.component_dict.keys(), \
-            '{} already in layer {}'.format(name, self.name)
-        self.n_components += 1
-        self.component_dict[name] = Component(name, comment)
-        return self.component_dict[name]
-
-    def get_component(self, name):
-        return self.component_dict[name]
-
-    def __getitem__(self, name):
-        return self.get_component(name)
-
-    def rename_component(self, component, new_name):
-        if not isinstance(component, Component):
-            component = self.get_component(component)
-        old_name = component.name
-        self.component_dict[new_name] = self.component_dict[old_name]
-        del self.component_dict[old_name]
-        component.name = new_name
-        return old_name
-
+from .component import Component
+from .layer import Layer
 
 
 class Recipe(object):
@@ -179,7 +144,7 @@ class Recipe(object):
                                   name_layer,
                                   role]
 
-    def get(self, att):
+    def get(self, att, role=None):
         df = self.ingredients
         if isinstance(att, int):
             return df.role.iloc[[att]]
@@ -188,6 +153,11 @@ class Recipe(object):
         else:
             idx = df.long_name.apply(fnmatch, pat=att)
             return df.role[idx]
+
+    def get_of_specific_role(self, att, role=None):
+        series = self.get(att)
+        idx = series == role
+        return series[idx]
 
     def rename_ingredients(self, col, old_name, new_name):
         idx = self.ingredients.loc[:, col].values == old_name
