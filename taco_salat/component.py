@@ -21,8 +21,8 @@ class Component(BaseComponent):
                  comment=''):
         super(Component, self).__init__(name=name,
                                         comment=comment)
-        self.clf = None
-        self.attributes = None
-        self.label = None
-        self.returns = None
-        self.weigt = None
+        self.clf = clf
+        self.attributes = attributes
+        self.label = label
+        self.returns = returns
+        self.weight = weight

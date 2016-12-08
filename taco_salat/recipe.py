@@ -25,6 +25,7 @@ class Recipe(object):
                                                  'name_layer',
                                                  'role'])
         self.layer_dict = {}
+        self.layer_order = []
         self.n_layers = 0
 
     def add_layer(self, layer):
@@ -32,6 +33,7 @@ class Recipe(object):
             '{} already exists'.format(name)
         self.layer_dict[layer.name] = layer
         self.n_layers += 1
+        self.layer_order.append(layer)
         return self.layer_dict[layer.name]
 
     def get_layer(self, name):
@@ -47,6 +49,7 @@ class Recipe(object):
             '{} already exists'.format(new_name)
         old_name = layer.name
         self.layer_dict[new_name] = self.layer_dict[old_name]
+
         del self.layer_dict[old_name]
 
         layer.name = new_name
@@ -55,7 +58,8 @@ class Recipe(object):
     def add_component(self, layer, component):
         if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
-        return layer.add_component(component)
+        layer.add_component(component)
+        return layer
 
     def get_component(self, layer, name):
         if not isinstance(layer, BaseLayer):
@@ -102,6 +106,8 @@ class Recipe(object):
                 2 : Weight
                 3 : Only used for labeling
         """
+        if role not in [0, 1, 2, 3]:
+            return None
         df = self.ingredients
         if unique_name is None:
             unique_name = str(len(df))
@@ -129,21 +135,18 @@ class Recipe(object):
                                   component.name,
                                   name_layer,
                                   role]
+        return unique_name
 
     def get(self, att, role=None):
         df = self.ingredients
         if isinstance(att, int):
-            return df.role.iloc[[att]]
+            return df.iloc[[att]]
         elif att in df.index:
-            return df.role.loc[[att]]
+            return df[[att]]
         else:
             idx = df.long_name.apply(fnmatch, pat=att)
-            return df.role[idx]
-
-    def get_of_specific_role(self, att, role=None):
-        series = self.get(att)
-        idx = series == role
-        return series[idx]
+            print(idx)
+            return df[idx]
 
     def rename_ingredients(self, col, old_name, new_name):
         idx = self.ingredients.loc[:, col].values == old_name
