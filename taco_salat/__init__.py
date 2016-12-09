@@ -4,7 +4,7 @@ import warnings
 
 from recipe import Recipe
 from component import BaseComponent, Component
-from layer import BaseLayer
+from layer import BaseLayer, Layer
 
 class TacoSalat(Recipe):
     """Base Class providing an interface to stack classification layers.
@@ -86,13 +86,6 @@ class TacoSalat(Recipe):
                                     name_layer=att,
                                     role=3)
 
-
-
-
-
-
-
-
     def add_component(self,
                       layer,
                       name,
@@ -165,15 +158,42 @@ class TacoSalat(Recipe):
                 component.returns[i] = unique_name
 
 
-    def fit_df(df, type_col='Type', weight_col='Weight'):
-        raise NotImplementedError
+    def fit_df(self, df, n_components_parallel=1, clear_df=True):
+        df_input_cols = df.columns
+        for layer in self.layer_order:
+            if hasattr(layer, 'fit_df'):
+                layer_df = layer.fit_df(df)
+                if isinstance(layer_df, pd.DataFrame):
+                    layer_entries = self.get('{}.*'.format(layer.name))
+                    layer_obs = [name for name, _ in layer_entries.iterrows()]
+                    layer_df = layer_df.loc[:, layer_obs]
+                    df.join(layer_df)
+        if clear_df:
+            df_final_cols = df.columns
+            drop_cols = [col for col in df_final_cols
+                         if col not in df_input_cols]
+
+    def predict_df(self, df, clear_df=False):
+        df_input_cols = df.columns
+        for layer in self.layer_order:
+            if hasattr(layer, 'predict_df'):
+                layer_df = layer.predict_df(df)
+                if isinstance(layer_df, pd.DataFrame):
+                    layer_entries = self.get('{}:*'.format(layer.name))
+                    layer_obs = [name for name, _ in layer_entries.iterrows()]
+                    layer_df = layer_df.loc[:, layer_obs]
+                    df = df.join(layer_df)
+        if clear_df:
+            df_final_cols = df.columns
+            drop_cols = [col for col in df_final_cols
+                         if col not in df_input_cols]
+        return df
 
     def predict_proba_df(df):
         raise NotImplementedError
 
 
-    def predict_df(df):
-        raise NotImplementedError
+
 
     def fit(X, y, sample_weights=None):
         raise NotImplementedError
@@ -191,16 +211,17 @@ if __name__ == '__main__':
     import pandas as pd
     from sklearn.datasets import load_iris
     from sklearn.ensemble import RandomForestClassifier
-
+    from sklearn.model_selection import KFold
     iris = load_iris()
+    target = np.array(iris['target'], dtype=int)
 
-    df = pd.DataFrame(data= np.c_[iris['data'], iris['target']],
-                      columns= iris['feature_names'] + ['target'])
+    df = pd.DataFrame(data=iris['data'],
+                      columns= iris['feature_names'])
+    df['target'] = target
+
 
     salat = TacoSalat(df, roles=[0, 0, 0, 0, 1])
-
-
-    first_layer = BaseLayer('FirstClassificationLayer')
+    first_layer = Layer('FirstClassificationLayer')
     salat.add_layer(first_layer)
 
     salat.add_component(first_layer,
@@ -208,10 +229,15 @@ if __name__ == '__main__':
                         clf=RandomForestClassifier(),
                         attributes=['layer0:attribute:*'],
                         label='layer0:label:*',
-                        returns=2,
+                        returns=['score_1', 'score_2', 'score_3'],
                         weight=None,
-                        roles=[0, -1],
-                        comment='')
+                        roles=[0, 0, 0],
+                        predict_func='predict_proba')
+    kf = KFold(n_splits=3, shuffle=True)
+    for train, test in kf.split(np.empty(df.shape)):
+        df_train = df.loc[train, :]
+        df_test = df.loc[test, :]
+        salat.fit_df(df_train)
+        salat.predict_df(df_test)
 
-    print(salat.ingredients)
 

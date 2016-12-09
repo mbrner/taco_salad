@@ -32,3 +32,26 @@ class BaseLayer(object):
         del self.component_dict[old_name]
         component.name = new_name
         return old_name
+
+class Layer(BaseLayer):
+    def fit_df(self, df):
+        new_df = None
+        for key, component in self.component_dict.items():
+            if hasattr(component, 'fit_df'):
+                comp_df = component.fit_df(df)
+                if new_df is None:
+                    new_df = comp_df
+                else:
+                    new_df = new_df.join(comp_df)
+        return new_df
+
+    def predict_df(self, df):
+        new_df = None
+        for key, component in self.component_dict.items():
+            if hasattr(component, 'predict_df'):
+                comp_df = component.predict_df(df)
+                if new_df is None:
+                    new_df = comp_df
+                else:
+                    new_df = new_df.join(comp_df)
+        return new_df
