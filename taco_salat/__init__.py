@@ -2,9 +2,12 @@
 # -*- coding: utf-8 -*-
 import warnings
 
-from recipe import Recipe
-from component import BaseComponent, Component
-from layer import BaseLayer, Layer
+import panda as pd
+
+from .recipe import Recipe
+from .component import BaseComponent, Component
+from .layer import BaseLayer, Layer
+
 
 class TacoSalat(Recipe):
     """Base Class providing an interface to stack classification layers.
@@ -32,7 +35,7 @@ class TacoSalat(Recipe):
         label_component = BaseComponent('label')
         weight_component = BaseComponent('weight')
         misc_component = BaseComponent('misc')
-        self.add_layer(base_layer)
+        super(TacoSalat, self).add_layer(base_layer)
         super(TacoSalat, self).add_component(layer=base_layer,
                                              component=attribute_component)
         super(TacoSalat, self).add_component(layer=base_layer,
@@ -45,13 +48,13 @@ class TacoSalat(Recipe):
         if df is not None and roles is not None:
             columns = list(df.columns)
             for name, role in zip(columns, roles):
-                if role  == 0:
+                if role == 0:
                     sel_component = attribute_component
-                elif role  == 1:
+                elif role == 1:
                     sel_component = label_component
-                elif role  == 2:
+                elif role == 2:
                     sel_component = weight_component
-                elif role  == 3:
+                elif role == 3:
                     sel_component = misc_component
                 else:
                     continue
@@ -86,6 +89,15 @@ class TacoSalat(Recipe):
                                     name_layer=att,
                                     role=3)
 
+    def add_layer(self,
+                  layer_name=None,
+                  comment=''):
+        if layer_name is None:
+            layer_name = 'layer{}'.format(len(self.layer_order))
+        layer = Layer(name=layer_name,
+                      comment=comment)
+        super(TacoSalat, self).add_layer(layer)
+
     def add_component(self,
                       layer,
                       name,
@@ -95,6 +107,8 @@ class TacoSalat(Recipe):
                       returns,
                       roles=None,
                       weight=None,
+                      fit_func='fit',
+                      predict_func='predict_proba',
                       comment=''):
         if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
@@ -143,6 +157,8 @@ class TacoSalat(Recipe):
                               label=label_name,
                               returns=returns,
                               weight=weight_name,
+                              fit_func=fit_func,
+                              predict_func=predict_func,
                               comment=comment)
 
         super(TacoSalat, self).add_component(layer=layer,
@@ -156,7 +172,6 @@ class TacoSalat(Recipe):
                                               role=role_i)
             if return_i is None:
                 component.returns[i] = unique_name
-
 
     def fit_df(self, df, n_components_parallel=1, clear_df=True):
         df_input_cols = df.columns
@@ -172,6 +187,7 @@ class TacoSalat(Recipe):
             df_final_cols = df.columns
             drop_cols = [col for col in df_final_cols
                          if col not in df_input_cols]
+            df = df.drop(drop_cols)
 
     def predict_df(self, df, clear_df=False):
         df_input_cols = df.columns
@@ -186,14 +202,12 @@ class TacoSalat(Recipe):
         if clear_df:
             df_final_cols = df.columns
             drop_cols = [col for col in df_final_cols
-                         if col not in df_input_cols]
+                         if col not in df_input_cols not in layer_obs]
+            df = df.drop(drop_cols)
         return df
 
     def predict_proba_df(df):
         raise NotImplementedError
-
-
-
 
     def fit(X, y, sample_weights=None):
         raise NotImplementedError
@@ -203,41 +217,3 @@ class TacoSalat(Recipe):
 
     def predict_proba(X):
         raise NotImplementedError
-
-
-
-if __name__ == '__main__':
-    import numpy as np
-    import pandas as pd
-    from sklearn.datasets import load_iris
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.model_selection import KFold
-    iris = load_iris()
-    target = np.array(iris['target'], dtype=int)
-
-    df = pd.DataFrame(data=iris['data'],
-                      columns= iris['feature_names'])
-    df['target'] = target
-
-
-    salat = TacoSalat(df, roles=[0, 0, 0, 0, 1])
-    first_layer = Layer('FirstClassificationLayer')
-    salat.add_layer(first_layer)
-
-    salat.add_component(first_layer,
-                        name='RandomForest',
-                        clf=RandomForestClassifier(),
-                        attributes=['layer0:attribute:*'],
-                        label='layer0:label:*',
-                        returns=['score_1', 'score_2', 'score_3'],
-                        weight=None,
-                        roles=[0, 0, 0],
-                        predict_func='predict_proba')
-    kf = KFold(n_splits=3, shuffle=True)
-    for train, test in kf.split(np.empty(df.shape)):
-        df_train = df.loc[train, :]
-        df_test = df.loc[test, :]
-        salat.fit_df(df_train)
-        salat.predict_df(df_test)
-
-

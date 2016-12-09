@@ -19,6 +19,7 @@ class Component(BaseComponent):
                  label=None,
                  returns=None,
                  weight=None,
+                 fit_func='fit',
                  predict_func='predict_proba',
                  comment=''):
         super(Component, self).__init__(name=name,
@@ -29,15 +30,16 @@ class Component(BaseComponent):
         self.returns = returns
         self.weight = weight
         self.predict_func = getattr(clf, predict_func)
+        self.fit_func = getattr(clf, fit_func)
 
     def fit_df(self, df):
         X = df.loc[:, self.attributes]
         y = df.loc[:, self.label]
         if self.weight is None:
-            self.clf = self.clf.fit(X.values, y.values)
+            self.clf = self.fit_func(X.values, y.values)
         else:
             sample_weight = df.loc[:, self.weight]
-            self.clf = self.clf.fit(X.values, y.values)
+            self.clf = self.clf.fit(X.values, y.values, sample_weight)
 
     def predict_df(self, df):
         idx = df.index
