@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 import warnings
 
-import panda as pd
+import pandas as pd
+
+from sklearn.model_selection import KFold
 
 from .recipe import Recipe
 from .component import BaseComponent, Component
@@ -367,7 +369,7 @@ class TacoSalat(Recipe):
         kf = KFold(n_split=kfold, shuffle=shuffle)
         for layer in self.layer_order:
             if hasattr(layer, 'fit_df'):
-                layer_df = layer.fit_df(df, kfold=kf, final_model)
+                layer_df = layer.fit_df(df, kfold=kf, final_model=final_model)
                 if isinstance(layer_df, pd.DataFrame):
                     layer_entries = self.get('{}.*'.format(layer.name))
                     layer_obs = [name for name, _ in layer_entries.iterrows()]

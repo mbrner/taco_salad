@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 import pandas as pd
 import numpy as np
 
-from component import BaseComponent
+from .component import BaseComponent
 
 
 class BaseLayer(object):

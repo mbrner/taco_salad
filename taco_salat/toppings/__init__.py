@@ -89,9 +89,10 @@ class ConfidenceCutter(object):
             Path where the curve is saved.
         """
         cut_curve = self.cut_opts.cut_curve
-        np.savez(filename, edges=cut_curve.edges,
-                           y=cut_curve.y,
-                           conf_index=self.conf_index)
+        np.savez(filename,
+                 edges=cut_curve.edges,
+                 y=cut_curve.y,
+                 conf_index=self.conf_index)
 
     def load_curve(self, filename):
         """Function to load a fitted curve.
@@ -164,7 +165,11 @@ class ConfidenceCutter(object):
                      n_bootstraps=10,
                      positions=None,
                      curve_type='mid'):
-            self.n_steps = n_steps
+            if positions is not None:
+                self.positions = positions
+                self.n_steps = len(self.positions)
+            else:
+                self.n_steps = n_steps
             self.n_bootstraps = n_bootstraps
             self.window_size = window_size
             self.edges = None
@@ -367,8 +372,9 @@ class ConfidenceCutter(object):
                                  sample_weights=weights_i)
 
         cut_value = self.__find_best_cut_inner__(wrapped_decision_func,
-                                             possible_cuts,
-                                             n_points=n_points)
+                                                 possible_cuts,
+                                                 n_points=n_points)
+
         return cut_value
 
     def __find_best_cut_inner__(self, eval_func, conf, n_points=100):
@@ -380,7 +386,7 @@ class ConfidenceCutter(object):
         else:
             final = False
             idx = [(i * step_width) for i in range(n_points)]
-            idx[-1 ] = n_confs -1
+            idx[-1] = n_confs - 1
             selected_cuts = conf[idx]
         criteria_values = [eval_func(cut) for cut in selected_cuts]
         idx_min = np.argmin(criteria_values)
@@ -398,7 +404,6 @@ class ConfidenceCutter(object):
     def __determine_cut_values_mp__(self, X, y_true, sample_weight):
         edges = self.cut_opts.edges
         positions = self.cut_opts.positions
-
         X_o = X[:, 1]
         X_c = X[:, 0]
         n_points = 5

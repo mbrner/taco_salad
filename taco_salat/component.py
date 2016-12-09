@@ -54,5 +54,3 @@ class Component(BaseComponent):
             for i, name in enumerate(self.returns):
                 return_df[name] = return_clf[:, i]
         return return_df
-
-

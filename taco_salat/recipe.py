@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 from fnmatch import fnmatch
-from component import BaseComponent
-from layer import BaseLayer
+from .component import BaseComponent
+from .layer import BaseLayer
 
 
 class Recipe(object):
