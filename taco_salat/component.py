@@ -40,6 +40,7 @@ class Component(BaseComponent):
         else:
             sample_weight = df.loc[:, self.weight]
             self.clf = self.clf.fit(X.values, y.values, sample_weight)
+        return self
 
     def predict_df(self, df):
         idx = df.index

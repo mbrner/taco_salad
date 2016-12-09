@@ -148,11 +148,15 @@ class TacoSalat(Recipe):
 
     def add_layer(self,
                   layer_name=None,
-                  comment=''):
+                  comment='',
+                  n_jobs=1):
         if layer_name is None:
             layer_name = 'layer{}'.format(len(self.layer_order))
-        layer = Layer(name=layer_name,
-                      comment=comment)
+        if n_jobs > 1:
+            raise NotImplementedError
+        else:
+            layer = Layer(name=layer_name,
+                          comment=comment)
         super(TacoSalat, self).add_layer(layer)
 
     def add_component(self,

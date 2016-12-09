@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from concurrent.futures import ThreadPoolExecutor, wait
+
 import pandas as pd
-from component import BaseComponent
 from sklearn.model_selection import KFold
+
+from component import BaseComponent
 
 class BaseLayer(object):
     def __init__(self, name, comment=''):
@@ -50,7 +53,8 @@ class Layer(BaseLayer):
         if final_model:
             for key, component in self.component_dict.items():
                 if hasattr(component, 'fit_df'):
-                    component.fit_df(df)
+                    component = component.fit_df(df)
+                    self.component_dict[component.name] = component
         return new_df
 
     def predict_df(self, df):
@@ -62,4 +66,74 @@ class Layer(BaseLayer):
                     new_df = comp_df
                 else:
                     new_df = new_df.join(comp_df)
+        return new_df
+
+class LayerParallel(Layer):
+    def __init__(name, n_jobs, predict_parallel=False, comment=''):
+        super(LayerParallel, self).__init__(name=name,
+                                            comment=comment)
+        self.n_jobs = n_jobs
+        self.predict_parallel = predict_parallel
+
+
+    def fit_df(self, df, kfold, final_model=False):
+        new_df = pd.DataFrame()
+
+        def fit_predict_single_component(component, df_train, df_test):
+            component = component.fit_df(df_train)
+            return component, component.predict_df(df_test)
+
+        with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+            futures = []
+            for train, test in kfold.split(np.empty(shape(df))):
+                df_train = df.loc[train, :]
+                df_test = df.loc[test, :]
+                for key, component in self.component_dict.items():
+                    sel_att = component.attributes
+                    sel_att.append(component.label)
+                    if component.weight is not None:
+                        sel_att.append(component.weight)
+                    futures.append(executor.submit(
+                        fit_predict_single_component
+                        component=component,
+                        df_train=df_train.loc[:, sel_att],
+                        df_test=df_test.loc[:, sel_att]))
+            results = wait(futures)
+        for i, future_i in enumerate(results.done):
+            component, comp_df = future_i.result()
+            self.component_dict[component.name] = component
+            new_df = new_df.join(comp_df)
+
+        if final_model:
+            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+                for key, component in self.component_dict.items():
+                    if hasattr(component, 'fit_df'):
+                        sel_att = component.attributes
+                        sel_att.append(component.label)
+                        if component.weight is not None:
+                            sel_att.append(component.weight)
+                        component.fit_df(df.loc[:, sel_att])
+                results = wait(futures)
+            for i, future_i in enumerate(results.done):
+                component = future_i.result()
+                self.component_dict[component.name] = component
+        return new_df
+
+    def predict_df(self, df):
+        if self.predict_parallel:
+            new_df = pd.DataFrame()
+            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+                for key, component in self.predict_df.items():
+                    if hasattr(component, 'predict_df'):
+                        sel_att = component.attributes
+                        sel_att.append(component.label)
+                        if component.weight is not None:
+                            sel_att.append(component.weight)
+                        component.predict_df(df.loc[:, sel_att])
+                results = wait(futures)
+            for i, future_i in enumerate(results.done):
+                comp_df = future_i.result()
+                new_df = new_df.join(comp_df)
+        else:
+            new_df = super(LayerParallel, self).predict_df(df)
         return new_df
