@@ -26,6 +26,15 @@ class TacoSalat(Recipe):
 
     - arrays with the names of the features for the diffrent roles
 
+    In default a 'layer0' is added. This layer is an object of the
+    taco_salat.layer.BaseLayer class. Also four components 'attribute',
+    'lablel', 'weight' and 'misc' are added to the 'layer0'. To those
+    components the features are added depending on their role. To do
+    all steps manually simply init the TacoSalat without any parameters
+    and use TacoSalat.add_ingridient to add all the input features.
+    The 'rename_component' and 'rename_layer' methods can be used
+    to change the names of the default layer/components.
+
     Parameters
     ----------
     kfold : int, optional (default=10)
@@ -148,18 +157,55 @@ class TacoSalat(Recipe):
 
     def add_layer(self,
                   layer_name=None,
-                  comment='',
-                  n_jobs=1):
+                  n_jobs=1,
+                  fit_parallel=True,
+                  predict_parallel=False,
+                  comment=''):
+        """Method to register and add a component to a layer.
+
+        Parameters
+        ----------
+        layer_name : str
+            Name of the Layer
+
+        n_jobs : int, optional (default=1)
+            Number of jobs used for the layer. If > 1 the added layer
+            is a layer.LayerParallel. The fit_df/predict_df for each
+            component is performed in an extra process. Caution if the
+            components also have multicore classification/regression
+            algorithms.
+
+        fit_parallel : boolean, optional (default=True)
+            Only relevant for n_jobs > 1. If True the fit step is done
+            parallel.
+
+        predict_parallel : boolean, optional (default=False)
+            Only relevant for n_jobs > 1. If True the predict step is done
+            parallel.
+
+        comment : sr, optional (default='')
+            Comment for better documentation of the architecture.
+
+        Returns
+        -------
+
+        layer : taco_salat.layer.Layer or taco_salat.layer.LayerParallel
+            The added layer.
+
+        """
         if layer_name is None:
             layer_name = 'layer{}'.format(len(self.layer_order))
         if n_jobs > 1:
             layer = LayerParallel(name=layer_name,
                                   n_jobs=n_jobs,
-                                  comment=comment)
+                                  comment=comment,
+                                  fit_parallel=fit_parallel,
+                                  predict_parallel=predict_parallel)
         else:
             layer = Layer(name=layer_name,
                           comment=comment)
         super(TacoSalat, self).add_layer(layer)
+        return layer
 
     def add_component(self,
                       layer,
@@ -173,11 +219,11 @@ class TacoSalat(Recipe):
                       fit_func='fit',
                       predict_func='predict_proba',
                       comment=''):
-        """Method to register and add a component to a layer.
+        """Method to register and add a component to a component.
 
         Parameters
         ----------
-        layer : str or Layer
+        layer : str or taco_salat.layer.Layer
             Name of the Layer
 
         name : str
@@ -211,6 +257,12 @@ class TacoSalat(Recipe):
 
         comment : sr, optional (default='')
             Comment for better documentation of the architecture.
+
+        Returns
+        -------
+
+        component : taco_salat.component.Component
+            The added component.
 
         """
         if not isinstance(layer, BaseLayer):
@@ -275,8 +327,43 @@ class TacoSalat(Recipe):
                                               role=role_i)
             if return_i is None:
                 component.returns[i] = unique_name
+        return component
 
-    def fit_df(self, df, clear_df=True, final_model=False):
+    def fit_df(self, df, clear_df=True, final_model=True):
+        """Method to fit all components. To keep train/test data
+        disjunct all the time and to train all layers with the maximal
+        possible amout of samples. Each component is trained in a
+        cross validation to get a prediction for each sample.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            DataFrame containing the complete data. All features
+            registered in the lowest layer (default: 'layer0') have to
+            be a columns in the dataframe.
+
+        clear_df : boolean, optional (default=True)
+            The output of all layers is added to the dataframe during
+            the fit process. If True all added columns are removed at
+            the end.
+
+        final_model : boolean (defaults=False)
+            The last layer can be trained on all samples, because there
+            isn't a component depending on the output. If 'False' the
+            last layer is trained like the intermediate layers in a
+            cross validation. If 'True' the last layer is trained with
+            all samples. Note: If final_mode is 'False' and clear_df is
+            'False' the df has the out of the bag score for the complete
+            salat.
+
+        Returns
+        -------
+
+        df : pandas.Dataframe
+            The input dataframe with the out of the bag scores if
+            'clear_df' is False.
+
+        """
         df_input_cols = df.columns
         kf = KFold(n_split=kfold, shuffle=shuffle)
         for layer in self.layer_order:
@@ -294,6 +381,30 @@ class TacoSalat(Recipe):
             df = df.drop(drop_cols)
 
     def predict_df(self, df, clear_df=False):
+        """Method to apply the complete salat to a dataframe.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            DataFrame containing the complete data. All features
+            registered in the lowest layer (default: 'layer0') have to
+            be a columns in the dataframe.
+
+        clear_df : boolean, optional (default=True)
+            The output of all layers is added to the dataframe during
+            the fit process. If True all added columns are removed at
+            the end except the out of the last layer.
+
+        Returns
+        -------
+
+        df : pandas.Dataframe
+            The input dataframe with the scores for all layers
+            (clear_df=False) or only the last layers scores
+            (clear_df=True).
+
+        """
+
         df_input_cols = df.columns
         for layer in self.layer_order:
             if hasattr(layer, 'predict_df'):
@@ -309,15 +420,3 @@ class TacoSalat(Recipe):
                          if col not in df_input_cols not in layer_obs]
             df = df.drop(drop_cols)
         return df
-
-    def predict_proba_df(df):
-        raise NotImplementedError
-
-    def fit(X, y, sample_weights=None):
-        raise NotImplementedError
-
-    def predict(X):
-        raise NotImplementedError
-
-    def predict_proba(X):
-        raise NotImplementedError
