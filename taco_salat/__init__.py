@@ -188,7 +188,6 @@ class TacoSalat(Recipe):
 
         Returns
         -------
-
         layer : taco_salat.layer.Layer or taco_salat.layer.LayerParallel
             The added layer.
 
