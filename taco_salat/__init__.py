@@ -6,7 +6,7 @@ import panda as pd
 
 from .recipe import Recipe
 from .component import BaseComponent, Component
-from .layer import BaseLayer, Layer
+from .layer import BaseLayer, Layer, LayerParallel
 
 
 class TacoSalat(Recipe):
@@ -153,7 +153,9 @@ class TacoSalat(Recipe):
         if layer_name is None:
             layer_name = 'layer{}'.format(len(self.layer_order))
         if n_jobs > 1:
-            raise NotImplementedError
+            layer = LayerParallel(name=layer_name,
+                                  n_jobs=n_jobs,
+                                  comment=comment)
         else:
             layer = Layer(name=layer_name,
                           comment=comment)

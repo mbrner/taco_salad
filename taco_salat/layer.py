@@ -89,15 +89,18 @@ class LayerParallel(Layer):
                 df_train = df.loc[train, :]
                 df_test = df.loc[test, :]
                 for key, component in self.component_dict.items():
-                    sel_att = component.attributes
-                    sel_att.append(component.label)
-                    if component.weight is not None:
-                        sel_att.append(component.weight)
-                    futures.append(executor.submit(
-                        fit_predict_single_component
-                        component=component,
-                        df_train=df_train.loc[:, sel_att],
-                        df_test=df_test.loc[:, sel_att]))
+                    has_fit = hasattr(component, 'fit_df')
+                    has_predict = hasattr(component, 'predict_df')
+                    if has_fit and has_predict:
+                        sel_att = component.attributes
+                        sel_att.append(component.label)
+                        if component.weight is not None:
+                            sel_att.append(component.weight)
+                        futures.append(executor.submit(
+                            fit_predict_single_component
+                            component=component,
+                            df_train=df_train.loc[:, sel_att],
+                            df_test=df_test.loc[:, sel_att]))
             results = wait(futures)
         for i, future_i in enumerate(results.done):
             component, comp_df = future_i.result()
@@ -107,7 +110,9 @@ class LayerParallel(Layer):
         if final_model:
             with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
                 for key, component in self.component_dict.items():
-                    if hasattr(component, 'fit_df'):
+                    has_fit = hasattr(component, 'fit_df')
+                    has_predict = hasattr(component, 'predict_df')
+                    if has_fit and has_predict:
                         sel_att = component.attributes
                         sel_att.append(component.label)
                         if component.weight is not None:
