@@ -10,24 +10,75 @@ from .layer import BaseLayer, Layer
 
 
 class TacoSalat(Recipe):
-    """Base Class providing an interface to stack classification layers.
+    """Class provides all funtions to stack methods and perform fit and
+    predict. The class has to be initialized with the input features.
+    There are 4 diffrent roles for the features:
+    - 0 / 'attributes': Features intended for training
+    - 1 / 'labels': Features intended to be used as labels
+    - 2 / 'weights': Feaures intended to be used as sample weights
+    - 3 / 'misc': Features which are carried through all layers without
+                a specific intention.
+
+    There are two ways to init the salat. Provided:
+    - a Dataframe and an array with the intended roles
+
+    or:
+
+    - arrays with the names of the features for the diffrent roles
 
     Parameters
     ----------
-    ingredients : list of column names or int
-        Instance of LabelFactory used to generate Label from the Data.
+    kfold : int, optional (default=10)
+        Number of cross predict steps for the internal fit.
+
+    df : pandas.DataFrame (n_samples, n_cols) or list (n_cols,) or None
+        The dataframe is used to get the names of the columns.
+        Those names can be provided directly as a list. In both cases
+        a list with the roles for all features.
+
+    roles : array-like (n_cols,) or None
+        Array containing the role as int for all features.
+
+    attributes: array-like or None
+        Names of all features intended to be used as attributes.
+
+    labels: array-like or None
+        Names of all features intended to be used as labels.
+
+    weights: array-like or None
+        Names of all features intended to be used as weights.
+
+    misc: array-like or None
+        Names of all features without a specific role.
 
     Attributes
     ----------
+    kfold : int
+        Number of cross predict steps for the internal fit.
+
+    ingredients : pandas.DataFrame
+        Dataframe for the book keeping for all features.
+
+    layer_dict : dict
+        Dictionary containing all layers.
+
+    layer_order : list
+        List with all layers in the order of execution.
+
+    n_layers : int
+        Number of layers
 
     """
     def __init__(self,
+                 kfold=10,
                  df=None,
                  roles=None,
                  attributes=[],
                  labels=[],
                  weights=[],
                  misc=[]):
+        self.kfold = 10
+
         super(TacoSalat, self).__init__()
 
         base_layer = BaseLayer('layer0')
@@ -46,7 +97,13 @@ class TacoSalat(Recipe):
                                              component=misc_component)
 
         if df is not None and roles is not None:
-            columns = list(df.columns)
+            assert isinstance(df, pd.DataFrame) or isinstance(df, list), \
+                '\'df\' has to be a Pandas.DataFrame or a list with the ' \
+                'column names'
+            if isinstance(df, pd.DataFrame):
+                columns = list(df.columns)
+            else:
+                columns = df
             for name, role in zip(columns, roles):
                 if role == 0:
                     sel_component = attribute_component
@@ -110,6 +167,46 @@ class TacoSalat(Recipe):
                       fit_func='fit',
                       predict_func='predict_proba',
                       comment=''):
+        """Method to register and add a component to a layer.
+
+        Parameters
+        ----------
+        layer : str or Layer
+            Name of the Layer
+
+        name : str
+            Name of the component
+
+        attributes : list of str
+            List with all features used as attributes.
+
+        label : str
+            Name of the feature used as the label.
+
+        returns : int or list of str
+            Number of features that will be returnd by the 'clf' or names
+
+        roles : None or array-like (ints) shape=(n_returns,), optional
+            If None all returns are treated as attributes (role=0). Or
+            the different roles can be defined as an array of ints. To
+            ignore returned values of the clf just use a
+            role != [0, 1, 2, 3]
+
+        weight : None or str
+            None for no sample weights or name of the sample weight.
+
+        fit_func : str, optional (default='fit')
+            Name of the function, that should be called in the 'fit_df'
+            function.
+
+        predict_func: str, optional (default='predict_proba')
+            Name of the function, that should be called in The
+            'predict_df' function.
+
+        comment : sr, optional (default='')
+            Comment for better documentation of the architecture.
+
+        """
         if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
         layer_index = self.layer_order.index(layer)
@@ -173,7 +270,7 @@ class TacoSalat(Recipe):
             if return_i is None:
                 component.returns[i] = unique_name
 
-    def fit_df(self, df, n_components_parallel=1, clear_df=True):
+    def fit_df(self, df, clear_df=True):
         df_input_cols = df.columns
         for layer in self.layer_order:
             if hasattr(layer, 'fit_df'):

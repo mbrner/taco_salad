@@ -82,7 +82,7 @@ class Recipe(object):
                        component='input',
                        name_layer=None,
                        role=0):
-        """Method to add all parameters.
+        """Method to register a ingredient.
 
         Parameters
         ----------
@@ -104,7 +104,7 @@ class Recipe(object):
                 0 : Attribute
                 1 : Label
                 2 : Weight
-                3 : Only used for labeling
+                3 : Only used for labeling (misc)
         """
         if role not in [0, 1, 2, 3]:
             return None
