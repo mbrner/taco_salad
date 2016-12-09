@@ -77,7 +77,7 @@ class TacoSalat(Recipe):
                  labels=[],
                  weights=[],
                  misc=[]):
-        self.kfold = 10
+        self.kfold = kfold
 
         super(TacoSalat, self).__init__()
 
@@ -270,11 +270,12 @@ class TacoSalat(Recipe):
             if return_i is None:
                 component.returns[i] = unique_name
 
-    def fit_df(self, df, clear_df=True):
+    def fit_df(self, df, clear_df=True, final_model=False):
         df_input_cols = df.columns
+        kf = KFold(n_split=kfold, shuffle=shuffle)
         for layer in self.layer_order:
             if hasattr(layer, 'fit_df'):
-                layer_df = layer.fit_df(df)
+                layer_df = layer.fit_df(df, kfold=kf, final_model)
                 if isinstance(layer_df, pd.DataFrame):
                     layer_entries = self.get('{}.*'.format(layer.name))
                     layer_obs = [name for name, _ in layer_entries.iterrows()]
