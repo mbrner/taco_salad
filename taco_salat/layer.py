@@ -3,9 +3,10 @@
 from concurrent.futures import ThreadPoolExecutor, wait
 
 import pandas as pd
-from sklearn.model_selection import KFold
+import numpy as np
 
 from component import BaseComponent
+
 
 class BaseLayer(object):
     def __init__(self, name, comment=''):
@@ -16,7 +17,7 @@ class BaseLayer(object):
 
     def add_component(self, component):
         assert component.name not in self.component_dict.keys(), \
-            '{} already in layer {}'.format(name, self.name)
+            '{} already in layer {}'.format(component.name, self.name)
         self.n_components += 1
         self.component_dict[component.name] = component
         return self.component_dict[component.name]
@@ -36,11 +37,12 @@ class BaseLayer(object):
         component.name = new_name
         return old_name
 
+
 class Layer(BaseLayer):
     def fit_df(self, df, kfold, final_model=False):
         new_df = None
         new_df = pd.DataFrame()
-        for train, test in kfold.split(np.empty(shape(df))):
+        for train, test in kfold.split(np.empty(df.shape)):
             df_train = df.loc[train, :]
             df_test = df.loc[test, :]
             for key, component in self.component_dict.items():
@@ -68,13 +70,13 @@ class Layer(BaseLayer):
                     new_df = new_df.join(comp_df)
         return new_df
 
+
 class LayerParallel(Layer):
-    def __init__(name, n_jobs, predict_parallel=False, comment=''):
+    def __init__(self, name, n_jobs, predict_parallel=False, comment=''):
         super(LayerParallel, self).__init__(name=name,
                                             comment=comment)
         self.n_jobs = n_jobs
         self.predict_parallel = predict_parallel
-
 
     def fit_df(self, df, kfold, final_model=False):
         new_df = pd.DataFrame()
@@ -85,7 +87,7 @@ class LayerParallel(Layer):
 
         with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
             futures = []
-            for train, test in kfold.split(np.empty(shape(df))):
+            for train, test in kfold.split(np.empty(df.shape)):
                 df_train = df.loc[train, :]
                 df_test = df.loc[test, :]
                 for key, component in self.component_dict.items():
@@ -97,7 +99,7 @@ class LayerParallel(Layer):
                         if component.weight is not None:
                             sel_att.append(component.weight)
                         futures.append(executor.submit(
-                            fit_predict_single_component
+                            fit_predict_single_component,
                             component=component,
                             df_train=df_train.loc[:, sel_att],
                             df_test=df_test.loc[:, sel_att]))
@@ -128,13 +130,15 @@ class LayerParallel(Layer):
         if self.predict_parallel:
             new_df = pd.DataFrame()
             with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+                futures = []
                 for key, component in self.predict_df.items():
                     if hasattr(component, 'predict_df'):
                         sel_att = component.attributes
                         sel_att.append(component.label)
                         if component.weight is not None:
                             sel_att.append(component.weight)
-                        component.predict_df(df.loc[:, sel_att])
+                        futures.append(executor.submit(component.predict_df,
+                                                       df=df.loc[:, sel_att]))
                 results = wait(futures)
             for i, future_i in enumerate(results.done):
                 comp_df = future_i.result()
