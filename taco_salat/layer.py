@@ -9,6 +9,33 @@ from .component import BaseComponent
 
 
 class BaseLayer(object):
+    """Layer providing all functionality to buidl up the architecture.
+    No fit or predict functions. Layer have a component_dict containing
+    all the component objects.
+
+    Parameters
+    ----------
+    name : str
+        Name of the Layer.
+
+    comment : str, optional (default='')
+        Commet for better documentation of the architecture.
+
+    Attributes
+    ----------
+    name : str
+        Name of the layer.
+
+    comment : str
+        Comment.
+
+    component_dict : dict
+        Dictionary containing all components.
+
+    n_components : int
+        Number of components.
+
+    """
     def __init__(self, name, comment=''):
         self.name = name
         self.comment = comment
@@ -39,7 +66,53 @@ class BaseLayer(object):
 
 
 class Layer(BaseLayer):
+    """Layer providing all functionality to build up the architecture
+    and fit/predict.
+
+    Parameters
+    ----------
+    name : str
+        Name of the Layer.
+
+    comment : str, optional (default='')
+        Commet for better documentation of the architecture.
+
+    Attributes
+    ----------
+    name : str
+        Name of the layer.
+
+    comment : str
+        Comment.
+
+    component_dict : dict
+        Dictionary containing all components.
+
+    n_components : int
+        Number of components.
+
+    """
     def fit_df(self, df, kfold, final_model=False):
+        """Method to fit all the components.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Dataframe containing all the features.
+
+        kfold : sklean.KFold
+            Cross-validation object.
+
+        final_model : bool, optional (defaultFalse)
+            Whether the layer is refittet on all samples, after the
+            x-validation is run to get scores for all samples.
+
+        Returns
+        -------
+        new_df : pandas.DataFrame
+            Dataframe with the new scores.
+
+        """
         new_df = pd.DataFrame()
         for train, test in kfold.split(np.empty(df.shape)):
             df_train = df.loc[train, :]
@@ -59,6 +132,19 @@ class Layer(BaseLayer):
         return new_df
 
     def predict_df(self, df):
+        """Method to get the prediction of all the components.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Dataframe containing all the features.
+
+        Returns
+        -------
+        new_df : pandas.DataFrame
+            Dataframe with the new scores.
+
+        """
         new_df = None
         for key, component in self.component_dict.items():
             if hasattr(component, 'predict_df'):
@@ -71,6 +157,49 @@ class Layer(BaseLayer):
 
 
 class LayerParallel(Layer):
+    """Layer providing all functionality to build up the architecture
+    and fit/predict. Provides multiprocessing functionality for
+    'fit_df'/'predict_df'.
+
+    Parameters
+    ----------
+    name : str
+        Name of the Layer.
+
+    n_jobs : int
+        Max number of parallel processes.
+
+    predict_parallel : bool, optinal (default=False)
+        Whether the 'predict_df' funciton should run in parallel.
+
+    fit_parallel : bool, optinal (default=False)
+        Whether the 'fit_df' funciton should run in parallel.
+
+    comment : str, optional (default='')
+        Commet for better documentation of the architecture.
+
+    Attributes
+    ----------
+    name : str
+        Name of the layer.
+
+    comment : str
+        Comment.
+
+    component_dict : dict
+        Dictionary containing all components.
+
+    predict_parallel : bool, optinal (default=False)
+        Whether the 'predict_df' funciton should run in parallel.
+
+    fit_parallel : bool, optinal (default=False)
+        Whether the 'fit_df' funciton should run in parallel.
+
+    n_components : int
+        Number of components.
+
+    """
+
     def __init__(self,
                  name,
                  n_jobs,
@@ -84,6 +213,26 @@ class LayerParallel(Layer):
         self.predict_parallel = predict_parallel
 
     def fit_df(self, df, kfold, final_model=False):
+        """Method to fit all the components.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Dataframe containing all the features.
+
+        kfold : sklean.KFold
+            Cross-validation object.
+
+        final_model : bool, optional (defaultFalse)
+            Whether the layer is refittet on all samples, after the
+            x-validation is run to get scores for all samples.
+
+        Returns
+        -------
+        new_df : pandas.DataFrame
+            Dataframe with the new scores.
+
+        """
         if self.fit_parallel:
             new_df = pd.DataFrame()
 
@@ -136,6 +285,19 @@ class LayerParallel(Layer):
         return new_df
 
     def predict_df(self, df):
+        """Method to get the prediction of all the components.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Dataframe containing all the features.
+
+        Returns
+        -------
+        new_df : pandas.DataFrame
+            Dataframe with the new scores.
+
+        """
         if self.predict_parallel:
             new_df = pd.DataFrame()
             with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
