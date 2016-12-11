@@ -6,6 +6,7 @@ import numpy as np
 from . import criteria
 from .curve import CurveSliding
 
+
 class ConfidenceCutter(object):
     """Method to find a confidence (X_c) cut curve depended on a second
     observable (X_o).

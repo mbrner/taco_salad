@@ -330,7 +330,7 @@ class TacoSalat(Recipe):
                 component.returns[i] = unique_name
         return component
 
-    def fit_df(self, df, clear_df=True, final_model=True):
+    def fit_df(self, df, clear_df=True, final_mode=None):
         """Method to fit all components. To keep train/test data
         disjunct all the time and to train all layers with the maximal
         possible amout of samples. Each component is trained in a
@@ -348,12 +348,13 @@ class TacoSalat(Recipe):
             the fit process. If True all added columns are removed at
             the end.
 
-        final_model : boolean (defaults=False)
+        final_mode : ['last'/True, 'all', None/False]
             The last layer can be trained on all samples, because there
-            isn't a component depending on the output. If 'False' the
-            last layer is trained like the intermediate layers in a
-            cross validation. If 'True' the last layer is trained with
-            all samples. Note: If final_mode is 'False' and clear_df is
+            isn't a component depending on the output. If 'True' the
+            last layer is trained with all samples. If 'all' all layers
+            are retrained after all samples were scored in the
+            x-validation.
+            Note: If final_mode is 'False' and clear_df is
             'False' the df has the out of the bag score for the complete
             salat.
 
@@ -366,10 +367,21 @@ class TacoSalat(Recipe):
 
         """
         df_input_cols = df.columns
-        kf = KFold(n_split=kfold, shuffle=shuffle)
-        for layer in self.layer_order:
+        kf = KFold(n_split=self.kfold, shuffle=True)
+        for i, layer in enumerate(self.layer_order):
             if hasattr(layer, 'fit_df'):
-                layer_df = layer.fit_df(df, kfold=kf, final_model=final_model)
+                if final_mode.lower() == 'all':
+                    final_model = True
+                elif final_mode.lower() == 'last' or final_mode:
+                    if layer == self.layer_order[-1]:
+                        final_model = True
+                    else:
+                        final_model = False
+                else:
+                    final_model = False
+                layer_df = layer.fit_df(df,
+                                        kfold=kf,
+                                        final_model=final_model)
                 if isinstance(layer_df, pd.DataFrame):
                     layer_entries = self.get('{}.*'.format(layer.name))
                     layer_obs = [name for name, _ in layer_entries.iterrows()]
