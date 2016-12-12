@@ -3,7 +3,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.datasets import make_classification
 from matplotlib import pyplot as plt
 
-from taco_salat.toppings import ConfidenceCutter, criteria
+from taco_salad.toppings import ConfidenceCutter, criteria
 
 if __name__ == '__main__':
     X, y = make_classification(n_samples=100000)
