@@ -13,10 +13,10 @@ class Recipe(object):
     ----------
     ingredients : pandas.DataFrame
         Containing the detailed ingredient list.
-        - 'long_name' : <layer>:<component>:<name_layer>
+        - 'long_name' : <layer>:<component>:<name_component>
         - 'layer' : Name of the layer containg the ingredient.
         - 'component' : Name of the component containing the ingredient
-        - 'name_layer' : Name of the ingredient inside the component
+        - 'name_component' : Name of the ingredient inside the component
         - 'role' : 0, 1, 2 or 3 depending on the role (see add_ingredient)
         The index of the dataframe is the 'unique_name' of the
         ingredients.
@@ -25,8 +25,9 @@ class Recipe(object):
         self.ingredients = pd.DataFrame(columns=['long_name',
                                                  'layer',
                                                  'component',
-                                                 'name_layer',
+                                                 'name_component',
                                                  'role'])
+        self.dependencies = pd.DataFrame()
         self.layer_dict = {}
         self.layer_order = []
         self.n_layers = 0
@@ -129,6 +130,9 @@ class Recipe(object):
         name : str
             Name of the component.
 
+        dependencies : list of str
+            Names of attributes needed for this component.
+
         Returns
         -------
         component : component.Component/BaseComponent
@@ -160,14 +164,31 @@ class Recipe(object):
 
         self.__rename_ingredients__('component', old_name, new_name)
 
-    def __generate_long_name__(self, layer, component, name_layer):
-        return '{}:{}:{}'.format(layer, component, name_layer)
+    def get_layer_and_component(self,
+                                long_name=None,
+                                layer=None,
+                                component=None):
+        if long_name is not None:
+            splitted_name = long_name.split(':')
+            layer_name = splitted_name[0]
+            comp_name = splitted_name[1]
+            layer = self.get_layer(layer_name)
+            component = self.get_component(layer, comp_name)
+        elif layer is not None and component is not None:
+            if not isinstance(layer, BaseLayer):
+                layer = self.get_layer(layer)
+            if not isinstance(component, BaseComponent):
+                component = self.get_component(layer, component)
+        return layer, component
+
+    def __generate_long_name__(self, layer, component, name_component):
+        return '{}:{}:{}'.format(layer, component, name_component)
 
     def add_ingredient(self,
                        unique_name=None,
                        layer='layer0',
                        component='input',
-                       name_layer=None,
+                       name_component=None,
                        role=0):
         """Method to register a ingredient.
 
@@ -182,7 +203,7 @@ class Recipe(object):
         component : int
             Index of the component.
 
-        name_layer : str
+        name_component : str
             Name inside the layer must not be globally unique,
             but inside the layer. Used to reference as layer:component:name.
 
@@ -207,22 +228,82 @@ class Recipe(object):
         if not isinstance(component, BaseComponent):
             component = self.get_component(layer, component)
 
-        if name_layer is None:
-            name_layer = str(len(df))
+        if name_component is None:
+            name_component = str(len(df))
 
-        layer_names = df.name_layer[df.layer == layer.name]
-        assert name_layer not in layer_names, \
+        component_features = df.name_component[df.component == component.name]
+        assert name_component not in component_features, \
             '{} already exists in layer {}'.format(unique_name, layer)
 
         long_name = self.__generate_long_name__(layer.name,
                                                 component.name,
-                                                name_layer)
-        df.loc[unique_name, :] = [long_name,
-                                  layer.name,
-                                  component.name,
-                                  name_layer,
-                                  role]
+                                                name_component)
+        df.loc[unique_name, 'long_name'] = long_name
+        df.loc[unique_name, 'layer'] = layer.name
+        df.loc[unique_name, 'component'] = component.name
+        df.loc[unique_name, 'name_component'] = name_component
+        df.loc[unique_name, 'role'] = role
+        self.dependencies.loc[unique_name, :] = False
         return unique_name
+
+    def set_dependencies(self,
+                         dependencies,
+                         att_name=None,
+                         layer=None,
+                         component=None,
+                         component_long_name=None):
+        if att_name is not None:
+            attribute = self.get(att_name)
+            dependency_col = '{}:{}'.format(attribute.iloc[0].layer,
+                                            attribute.iloc[0].component)
+        elif layer is not None and component is not None:
+            layer, component = self.get_layer_and_component(
+                long_name=component_long_name,
+                layer=layer,
+                component=component)
+        relevant_features = [self.get(dep) for dep in dependencies]
+        relevant_features = pd.concat(relevant_features, axis=0)
+        relevant_features = relevant_features.drop_duplicates().index
+        self.dependencies.loc[:, dependency_col] = False
+        self.dependencies.loc[relevant_features, dependency_col] = True
+
+    def __resolve_long_name__(self, long_name):
+        splitted_name = long_name.split(':')
+        if len(splitted_name) == 1:
+            layer = self.get_layer(long_name)
+            unique_name = None
+            component = None
+        elif len(splitted_name) == 2:
+            layer, component = self.get_layer_and_component(long_name)
+            unique_name = None
+        elif len(splitted_name) == 3:
+            layer, component = self.get_layer_and_component(long_name)
+            unique_name = self.get(long_name)
+            if len(unique_name) == 0:
+                raise KeyError('Feature part of long name unkown!')
+            elif len(unique_name) > 1:
+                raise KeyError('Feature part of long name not unique!')
+            else:
+                unique_name = unique_name.index.values[0]
+        return layer, component, unique_name
+
+    def resolve_dependencies(self, long_name):
+        if long_name not in self.dependencies.columns:
+            raise KeyError('{} not found!'.format(long_name))
+        component_dependencies = self.dependencies.loc[:, long_name]
+        dependencies = set()
+        for unique_name, used in component_dependencies.iteritems():
+            if used:
+                layer = self.ingredients.loc[unique_name, 'layer']
+                component = self.ingredients.loc[unique_name, 'component']
+                if layer == 'layer0':
+                    dependencies.add(unique_name)
+                else:
+                    dependencies.add(unique_name)
+                    component_name = '{}:{}'.format(layer, component)
+                    additions = self.resolve_dependencies(component_name)
+                    dependencies = dependencies.union(additions)
+        return dependencies
 
     def get(self, att):
         """Methods to get the part of the ingredients DataFrame matching
@@ -248,7 +329,7 @@ class Recipe(object):
         if isinstance(att, int):
             return df.iloc[[att]]
         elif att in df.index:
-            return df[[att]]
+            return df.loc[[att]]
         else:
             idx = df.long_name.apply(fnmatch, pat=att)
             return df[idx]
@@ -259,7 +340,7 @@ class Recipe(object):
         for name, entry in self.ingredients[idx].iterrows():
             long_name = self.__generate_long_name__(entry.layer,
                                                     entry.component,
-                                                    entry.name_layer)
+                                                    entry.name_component)
             self.ingredients.loc[name, 'long_name'] = long_name
 
     def get_ingredient_list(self, long_name=False):
@@ -270,7 +351,7 @@ class Recipe(object):
         long_name : boolean, optinal (default=False)
             If 'False' the 'unique_names' are returned.
             If 'True' the 'long_names' are returned:
-                <layer_name>:<component_name>:<name_layer>
+                <layer_name>:<component_name>:<name_component>
 
         Returns
         -------
@@ -281,3 +362,116 @@ class Recipe(object):
             return list(self.ingredients.loc[:, 'long_name'])
         else:
             return list(self.ingredients.index)
+
+    def get_activity_state(self):
+        components = self.ingredients.loc[:, 'component']
+        layers = self.ingredients.loc[:, 'layer']
+        component_long_names = set(['{}:{}'.format(lay, comp)
+                                    for lay, comp in zip(layers.values,
+                                                         components.values)])
+        state_layers = pd.Series(True, index=set(layers.values))
+        state_components = pd.Series(True, index=component_long_names)
+        for layer_i in state_layers.index:
+            state_layers.loc[layer_i] = self.layer_dict[layer_i].active
+
+        for long_i in component_long_names:
+            layer_i, comp_i = long_i.split(':')
+            state = self.layer_dict[layer_i][comp_i].active
+            state_components.loc[long_i] = state
+        return state_layers, state_components
+
+    def set_activity_state(self, state_layers=None, state_components=None):
+        if isinstance(state_layers, tuple):
+            state_components = state_layers[1]
+            state_layers = state_layers[0]
+        if state_layers is not None:
+            for layer_i, state in state_layers.iteritems():
+                if state:
+                    self.layer_dict[layer_i].activate()
+                else:
+                    self.layer_dict[layer_i].deactivate()
+
+        if state_components is not None:
+            for long_i, state in state_components.iteritems():
+                layer_i, comp_i = long_i.split(':')
+                if state:
+                    self.layer_dict[layer_i][comp_i].activate()
+                else:
+                    self.layer_dict[layer_i][comp_i].deactivate()
+
+    def __run_func_component__(self, func, long_name):
+        dependencies = self.resolve_dependencies(long_name)
+        dependency_dict = {}
+
+        for unique_name in dependencies:
+            layer = self.ingredients.loc[unique_name, 'layer']
+            component = self.ingredients.loc[unique_name, 'component']
+            if layer not in dependency_dict.keys():
+                dependency_dict[layer] = set()
+            dependency_dict[layer].add(component)
+
+        prev_state_layer, prev_state_comp = self.get_activity_state()
+        requested_state_layer = pd.Series(False, index=prev_state_layer.index)
+        requested_state_comp = pd.Series(False, index=prev_state_comp.index)
+        for layer, components in dependency_dict.items():
+            requested_state_layer.loc[layer] = True
+            for comp in components:
+                long_name_i = '{}:{}'.format(layer, comp)
+                requested_state_comp.loc[long_name_i] = True
+
+        requested_state_layer.loc[long_name.split(':')[0]] = True
+        requested_state_comp.loc[long_name] = True
+        self.set_activity_state(state_layers=requested_state_layer,
+                                state_components=requested_state_comp)
+        new_layer_state, new_comp_state = self.get_activity_state()
+        returned_values = func()
+        self.set_activity_state(state_layers=prev_state_layer,
+                                state_components=prev_state_comp)
+        return returned_values
+
+    def deactivate_component(self, long_name=None, layer=None, component=None):
+        layer, component = self.get_layer_and_component(long_name=long_name,
+                                                        layer=layer,
+                                                        component=component)
+        component_returns = component.returns
+        component.deactivate()
+        for unique_name in component_returns:
+            dependcy_series = self.dependencies.loc[unique_name, :]
+            for long_name_i, used in dependcy_series.iteritems():
+                if used:
+                    self.deactivate_component(long_name=long_name_i)
+
+    def activate_component(self, long_name=None, layer=None, component=None):
+        layer, component = self.get_layer_and_component(long_name=long_name,
+                                                        layer=layer,
+                                                        component=component)
+        component_returns = component.returns
+        component.activate()
+        for unique_name in component_returns:
+            dependcy_series = self.dependencies.loc[unique_name, :]
+            for long_name_i, used in dependcy_series.iteritems():
+                if used:
+                    self.activate_component(long_name=long_name_i)
+
+    def deactivate_layer(self, layer, first=True):
+        if not isinstance(layer, BaseLayer):
+            layer = self.get_layer(layer)
+        if first:
+            layer.deactivate()
+        unique_names = self.get('{}:*'.format(layer.name))
+        for unique_name in unique_names.index:
+            dependcy_series = self.dependencies.loc[unique_name, :]
+            for long_name_i, used in dependcy_series.iteritems():
+                if used:
+                    self.deactivate_component(long_name=long_name_i)
+
+    def activate_layer(self, layer):
+        if not isinstance(layer, BaseLayer):
+            layer = self.get_layer(layer)
+        layer.deactivate()
+        unique_names = self.get('{}:*'.format(layer.name))
+        for unique_name in unique_names.index:
+            dependcy_series = self.dependencies.loc[unique_name, :]
+            for long_name_i, used in dependcy_series.iteritems():
+                if used:
+                    self.deactivate_component(long_name=long_name_i)

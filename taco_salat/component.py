@@ -20,6 +20,19 @@ class BaseComponent(object):
                  comment=''):
         self.name = name
         self.comment = comment
+        self.active = False
+
+    def fit_df(self, *args, **kwargs):
+        assert self.active, 'Trying to fit an inactive component!'
+
+    def predict_df(self, *args, **kwargs):
+        assert self.active, 'Trying to predict with an inactive component!'
+
+    def activate(self):
+        self.deactivate()
+
+    def deactivate(self):
+        self.active = False
 
 
 class Component(BaseComponent):
@@ -105,6 +118,13 @@ class Component(BaseComponent):
         self.weight = weight
         self.predict_func = getattr(clf, predict_func)
         self.fit_func = getattr(clf, fit_func)
+        self.active = True
+
+    def activate(self):
+        self.active = True
+
+    def deactivate(self):
+        self.active = False
 
     def fit_df(self, df):
         """Method to fit the components.
@@ -120,13 +140,15 @@ class Component(BaseComponent):
             Self.
 
         """
-        X = df.loc[:, self.attributes]
-        y = df.loc[:, self.label]
-        if self.weight is None:
-            self.clf = self.fit_func(X.values, y.values)
-        else:
-            sample_weight = df.loc[:, self.weight]
-            self.clf = self.clf.fit(X.values, y.values, sample_weight)
+        super(BaseComponent, self).fit_df()
+        if self.active:
+            X = df.loc[:, self.attributes]
+            y = df.loc[:, self.label]
+            if self.weight is None:
+                self.clf = self.fit_func(X.values, y.values)
+            else:
+                sample_weight = df.loc[:, self.weight]
+                self.clf = self.clf.fit(X.values, y.values, sample_weight)
         return self
 
     def predict_df(self, df):
@@ -143,14 +165,18 @@ class Component(BaseComponent):
             Dataframe of the scores.
 
         """
-        idx = df.index
-        X = df.loc[:, self.attributes]
-        return_clf = self.predict_func(X.values)
-        return_df = pd.DataFrame(columns=self.returns,
-                                 index=idx)
-        if len(self.returns) == 1:
-            return_df[self.returns[0]] = return_clf
+        super(BaseComponent, self).predict_df()
+        if self.active:
+            idx = df.index
+            X = df.loc[:, self.attributes]
+            return_clf = self.predict_func(X.values)
+            return_df = pd.DataFrame(columns=self.returns,
+                                     index=idx)
+            if len(self.returns) == 1:
+                return_df[self.returns[0]] = return_clf
+            else:
+                for i, name in enumerate(self.returns):
+                    return_df[name] = return_clf[:, i]
+            return return_df
         else:
-            for i, name in enumerate(self.returns):
-                return_df[name] = return_clf[:, i]
-        return return_df
+            return None

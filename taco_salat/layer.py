@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor, wait
+from fnmatch import fnmatch
 
 import pandas as pd
 import numpy as np
@@ -41,6 +42,7 @@ class BaseLayer(object):
         self.comment = comment
         self.component_dict = {}
         self.n_components = 0
+        self.active = False
 
     def add_component(self, component):
         assert component.name not in self.component_dict.keys(), \
@@ -63,6 +65,30 @@ class BaseLayer(object):
         del self.component_dict[old_name]
         component.name = new_name
         return old_name
+
+    def fit_df(self, *args, **kwargs):
+        assert self.active, 'Trying to fit an inactive layer!'
+
+    def predict_df(self, *args, **kwargs):
+        assert self.active, 'Trying to predict with an inactive layer!'
+
+    def activate_component(self, component_name='*'):
+        for key, component in self.component_dict.items():
+            if fnmatch(key, component_name):
+                component.active = True
+
+    def deactivate_component(self, component_name='*'):
+        for key, component in self.component_dict.items():
+            if fnmatch(key, component_name):
+                component.active = False
+
+        self.active = False
+
+    def activate(self):
+        self.deactivate()
+
+    def deactivate(self):
+        self.active = False
 
 
 class Layer(BaseLayer):
@@ -92,6 +118,16 @@ class Layer(BaseLayer):
         Number of components.
 
     """
+    def __init__(self, name, comment=''):
+        super(Layer, self).__init__(name, comment=comment)
+        self.active = True
+
+    def activate(self):
+        self.active = True
+
+    def deactivate(self):
+        self.active = False
+
     def fit_df(self, df, kfold, final_model=False):
         """Method to fit all the components.
 
@@ -113,20 +149,19 @@ class Layer(BaseLayer):
             Dataframe with the new scores.
 
         """
+        super(Layer, self).fit_df()
         new_df = pd.DataFrame()
         for train, test in kfold.split(np.empty(df.shape)):
             df_train = df.loc[train, :]
             df_test = df.loc[test, :]
             for key, component in self.component_dict.items():
-                has_fit = hasattr(component, 'fit_df')
-                has_predict = hasattr(component, 'predict_df')
-                if has_fit and has_predict:
+                if component.active:
                     component.fit_df(df_train)
                     comp_df = component.predict_df(df_test)
                     new_df = new_df.join(comp_df)
         if final_model:
             for key, component in self.component_dict.items():
-                if hasattr(component, 'fit_df'):
+                if component.active:
                     component = component.fit_df(df)
                     self.component_dict[component.name] = component
         return new_df
@@ -145,9 +180,10 @@ class Layer(BaseLayer):
             Dataframe with the new scores.
 
         """
+        super(Layer, self).predict_df()
         new_df = None
         for key, component in self.component_dict.items():
-            if hasattr(component, 'predict_df'):
+            if component.active:
                 comp_df = component.predict_df(df)
                 if new_df is None:
                     new_df = comp_df
@@ -233,6 +269,7 @@ class LayerParallel(Layer):
             Dataframe with the new scores.
 
         """
+        super(Layer, self).fit_df()
         if self.fit_parallel:
             new_df = pd.DataFrame()
 
@@ -246,9 +283,7 @@ class LayerParallel(Layer):
                     df_train = df.loc[train, :]
                     df_test = df.loc[test, :]
                     for key, component in self.component_dict.items():
-                        has_fit = hasattr(component, 'fit_df')
-                        has_predict = hasattr(component, 'predict_df')
-                        if has_fit and has_predict:
+                        if component.active:
                             sel_att = component.attributes
                             sel_att.append(component.label)
                             if component.weight is not None:
@@ -266,9 +301,7 @@ class LayerParallel(Layer):
             if final_model:
                 with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
                     for key, component in self.component_dict.items():
-                        has_fit = hasattr(component, 'fit_df')
-                        has_predict = hasattr(component, 'predict_df')
-                        if has_fit and has_predict:
+                        if component.active:
                             sel_att = component.attributes
                             sel_att.append(component.label)
                             if component.weight is not None:
@@ -298,12 +331,13 @@ class LayerParallel(Layer):
             Dataframe with the new scores.
 
         """
+        super(Layer, self).predict_df()
         if self.predict_parallel:
             new_df = pd.DataFrame()
             with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
                 futures = []
                 for key, component in self.predict_df.items():
-                    if hasattr(component, 'predict_df'):
+                    if component.active:
                         sel_att = component.attributes
                         sel_att.append(component.label)
                         if component.weight is not None:

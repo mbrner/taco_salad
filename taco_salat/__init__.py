@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import warnings
+import copy
 
 import pandas as pd
 
@@ -34,7 +35,7 @@ class TacoSalat(Recipe):
     components the features are added depending on their role. To do
     all steps manually simply init the TacoSalat without any parameters
     and use TacoSalat.add_ingridient to add all the input features.
-    The 'rename_component' and 'rename_layer' methods can be used
+    The 'rename_component' and 'rename_component' methods can be used
     to change the names of the default layer/components.
 
     Parameters
@@ -129,32 +130,32 @@ class TacoSalat(Recipe):
                 self.add_ingredient(unique_name=name,
                                     layer=base_layer,
                                     component=sel_component,
-                                    name_layer=name,
+                                    name_component=name,
                                     role=role)
         else:
             for att in attributes:
                 self.add_ingredient(unique_name=att,
                                     layer=base_layer,
                                     component=attribute_component,
-                                    name_layer=att,
+                                    name_component=att,
                                     role=0)
-            for label in labels:
-                self.add_ingredient(unique_name=att,
+            for label_i in labels:
+                self.add_ingredient(unique_name=label_i,
                                     layer=base_layer,
                                     component=label_component,
-                                    name_layer=att,
+                                    name_component=label_i,
                                     role=1)
             for weight_i in weights:
                 self.add_ingredient(unique_name=weight_i,
                                     layer=base_layer,
                                     component=weight_component,
-                                    name_layer=att,
+                                    name_component=weight_i,
                                     role=2)
             for misc_i in misc:
-                self.add_ingredient(unique_name=att,
+                self.add_ingredient(unique_name=misc_i,
                                     layer=base_layer,
                                     component=misc_component,
-                                    name_layer=att,
+                                    name_component=misc_i,
                                     role=3)
 
     def add_layer(self,
@@ -271,8 +272,8 @@ class TacoSalat(Recipe):
         layer_index = self.layer_order.index(layer)
 
         attribute_names = []
+        dependencies = []
         for att in attributes:
-            print(att)
             selected_att = self.get(att)
             for att_name, ingredient in selected_att.iterrows():
                 att_layer = self.get_layer(ingredient.layer)
@@ -283,6 +284,7 @@ class TacoSalat(Recipe):
                     warnings.warn('{} with role {} used as attribute!'.format(
                         ingredient.long_name, ingredient.role))
                 attribute_names.append(att_name)
+                dependencies.append(att_name)
         labels = self.get(label)
         assert len(labels) == 1, 'Only 1 ingredient can be used as the label'
         for label_name, ingredient in labels.iterrows():
@@ -290,15 +292,16 @@ class TacoSalat(Recipe):
             if ingredient.role != 1:
                 warnings.warn('{} with role {} used as label!'.format(
                     ingredient.long_name, ingredient.role))
-
+            dependencies.append(label_name)
         if weight is not None:
             weight = self.get(weight)
             assert len(weight) == 1, 'Only 1 ingredient useable as the weight'
             for weight_name, ingredient in weight.iterrows():
                 att_layer = self.get_layer(ingredient.layer)
-                if ingredient.role != 1:
+                if ingredient.role != 2:
                     warnings.warn('{} with role {} used as weight!'.format(
                         ingredient.long_name, ingredient.role))
+                dependencies.append(weight_name)
         else:
             weight_name = None
 
@@ -319,15 +322,15 @@ class TacoSalat(Recipe):
 
         super(TacoSalat, self).add_component(layer=layer,
                                              component=component)
-
         for i, [return_i, role_i] in enumerate(zip(returns, roles)):
             unique_name = self.add_ingredient(unique_name=return_i,
                                               layer=layer,
                                               component=component,
-                                              name_layer=return_i,
+                                              name_component=return_i,
                                               role=role_i)
-            if return_i is None:
+            if unique_name is not None:
                 component.returns[i] = unique_name
+        self.set_dependencies(dependencies, layer=layer, component=component)
         return component
 
     def fit_df(self, df, clear_df=True, final_mode=None):
@@ -369,7 +372,7 @@ class TacoSalat(Recipe):
         df_input_cols = df.columns
         kf = KFold(n_split=self.kfold, shuffle=True)
         for i, layer in enumerate(self.layer_order):
-            if hasattr(layer, 'fit_df'):
+            if layer.active:
                 if final_mode.lower() == 'all':
                     final_model = True
                 elif final_mode.lower() == 'last' or final_mode:
@@ -420,7 +423,7 @@ class TacoSalat(Recipe):
 
         df_input_cols = df.columns
         for layer in self.layer_order:
-            if hasattr(layer, 'predict_df'):
+            if layer.active:
                 layer_df = layer.predict_df(df)
                 if isinstance(layer_df, pd.DataFrame):
                     layer_entries = self.get('{}:*'.format(layer.name))
@@ -433,3 +436,18 @@ class TacoSalat(Recipe):
                          if col not in df_input_cols not in layer_obs]
             df = df.drop(drop_cols)
         return df
+
+    def fit_component(self, df, long_name, clear_df=True, final_mode=None):
+        def wrapped_fit_call():
+            return self.fit_df(df=df,
+                               clear_df=clear_df,
+                               final_mode=final_mode)
+
+        return self.__run_func_component__(wrapped_fit_call, long_name)
+
+    def predict_component(self, df, long_name, clear_df=True):
+        def wrapped_predict_call():
+            return self.predict_df(df=df,
+                                   clear_df=clear_df)
+
+        return self.__run_func_component__(wrapped_predict_call, long_name)
