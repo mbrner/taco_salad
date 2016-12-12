@@ -7,14 +7,14 @@ from sklearn.datasets import load_iris
 from sklearn.dummy import DummyClassifier
 
 
-from taco_salat import TacoSalat
+from taco_salad import TacoSalad
 
 if __name__ == '__main__':
     logging.captureWarnings(True)
     logging.basicConfig(format=('%(asctime)s|%(name)s|%(levelname)s| ' +
                         '%(message)s'), level=logging.INFO)
 
-    logging.info('Staring TacoSalat Iris Sample')
+    logging.info('Staring TacoSalad Iris Sample')
     iris = load_iris()
     target = np.array(iris['target'], dtype=int)
     print(np.bincount(target))
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     df['target'] = target
     logging.info('Loaded Iris Dataset.')
 
-    salat = TacoSalat(df=df, roles=[0, 0, 0, 0, 1])
+    salat = TacoSalad(df=df, roles=[0, 0, 0, 0, 1])
 
     salat.add_layer('clf1')
     salat.add_component('clf1',

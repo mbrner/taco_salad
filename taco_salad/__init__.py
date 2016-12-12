@@ -12,7 +12,7 @@ from .component import BaseComponent, Component
 from .layer import BaseLayer, Layer, LayerParallel
 
 
-class TacoSalat(Recipe):
+class TacoSalad(Recipe):
     """Class provides all funtions to stack methods and perform fit and
     predict. The class has to be initialized with the input features.
     There are 4 diffrent roles for the features:
@@ -22,7 +22,7 @@ class TacoSalat(Recipe):
     - 3 / 'misc': Features which are carried through all layers without
                 a specific intention.
 
-    There are two ways to init the salat. Provided:
+    There are two ways to init the salad. Provided:
     - a Dataframe and an array with the intended roles
 
     or:
@@ -30,11 +30,11 @@ class TacoSalat(Recipe):
     - arrays with the names of the features for the diffrent roles
 
     In default a 'layer0' is added. This layer is an object of the
-    taco_salat.layer.BaseLayer class. Also four components 'attribute',
+    taco_salad.layer.BaseLayer class. Also four components 'attribute',
     'lablel', 'weight' and 'misc' are added to the 'layer0'. To those
     components the features are added depending on their role. To do
-    all steps manually simply init the TacoSalat without any parameters
-    and use TacoSalat.add_ingridient to add all the input features.
+    all steps manually simply init the TacoSalad without any parameters
+    and use TacoSalad.add_ingridient to add all the input features.
     The 'rename_component' and 'rename_component' methods can be used
     to change the names of the default layer/components.
 
@@ -91,25 +91,25 @@ class TacoSalat(Recipe):
                  kfold=10):
         self.kfold = kfold
 
-        super(TacoSalat, self).__init__()
+        super(TacoSalad, self).__init__()
 
         base_layer = BaseLayer('layer0')
         attribute_component = BaseComponent('attribute')
         label_component = BaseComponent('label')
         weight_component = BaseComponent('weight')
         misc_component = BaseComponent('misc')
-        super(TacoSalat, self).add_layer(base_layer)
-        super(TacoSalat, self).add_component(layer=base_layer,
+        super(TacoSalad, self).add_layer(base_layer)
+        super(TacoSalad, self).add_component(layer=base_layer,
                                              component=attribute_component)
-        super(TacoSalat, self).add_component(layer=base_layer,
+        super(TacoSalad, self).add_component(layer=base_layer,
                                              component=label_component)
-        super(TacoSalat, self).add_component(layer=base_layer,
+        super(TacoSalad, self).add_component(layer=base_layer,
                                              component=weight_component)
-        super(TacoSalat, self).add_component(layer=base_layer,
+        super(TacoSalad, self).add_component(layer=base_layer,
                                              component=misc_component)
 
         if df is not None and roles is not None:
-            logging.info('TacoSalat initialized with a Dataframe.')
+            logging.info('TacoSalad initialized with a Dataframe.')
             assert isinstance(df, pd.DataFrame) or isinstance(df, list), \
                 '\'df\' has to be a Pandas.DataFrame or a list with the ' \
                 'column names'
@@ -134,7 +134,7 @@ class TacoSalat(Recipe):
                                     name_component=name,
                                     role=role)
         else:
-            logging.info('TacoSalat initialized with feature lists.')
+            logging.info('TacoSalad initialized with feature lists.')
             for att in attributes:
                 self.add_ingredient(unique_name=att,
                                     layer=base_layer,
@@ -193,7 +193,7 @@ class TacoSalat(Recipe):
 
         Returns
         -------
-        layer : taco_salat.layer.Layer or taco_salat.layer.LayerParallel
+        layer : taco_salad.layer.Layer or taco_salad.layer.LayerParallel
             The added layer.
 
         """
@@ -208,7 +208,7 @@ class TacoSalat(Recipe):
         else:
             layer = Layer(name=layer_name,
                           comment=comment)
-        super(TacoSalat, self).add_layer(layer)
+        super(TacoSalad, self).add_layer(layer)
         return layer
 
     def add_component(self,
@@ -227,7 +227,7 @@ class TacoSalat(Recipe):
 
         Parameters
         ----------
-        layer : str or taco_salat.layer.Layer
+        layer : str or taco_salad.layer.Layer
             Name of the Layer
 
         name : str
@@ -265,7 +265,7 @@ class TacoSalat(Recipe):
         Returns
         -------
 
-        component : taco_salat.component.Component
+        component : taco_salad.component.Component
             The added component.
 
         """
@@ -322,7 +322,7 @@ class TacoSalat(Recipe):
                               predict_func=predict_func,
                               comment=comment)
 
-        super(TacoSalat, self).add_component(layer=layer,
+        super(TacoSalad, self).add_component(layer=layer,
                                              component=component)
         for i, [return_i, role_i] in enumerate(zip(returns, roles)):
             unique_name = self.add_ingredient(unique_name=return_i,
@@ -361,7 +361,7 @@ class TacoSalat(Recipe):
             x-validation.
             Note: If final_mode is 'False' and clear_df is
             'False' the df has the out of the bag score for the complete
-            salat.
+            salad.
 
         Returns
         -------
@@ -399,7 +399,7 @@ class TacoSalat(Recipe):
         return df
 
     def predict_df(self, df, clear_df=False):
-        """Method to apply the complete salat to a dataframe.
+        """Method to apply the complete salad to a dataframe.
 
         Parameters
         ----------
