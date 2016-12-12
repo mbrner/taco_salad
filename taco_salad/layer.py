@@ -3,12 +3,9 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed, wait
 from fnmatch import fnmatch
 import logging
-import copy
 
 import pandas as pd
 import numpy as np
-
-from IPython import embed
 
 from .component import BaseComponent
 
@@ -260,8 +257,8 @@ class LayerParallel(Layer):
         self.predict_parallel = predict_parallel
 
     def fit_predict_single_component(self, component, df_train, df_test):
-        df_train = copy.deepcopy(df_train)
-        df_test = copy.deepcopy(df_test)
+        df_train = df_train
+        df_test = df_test
         component = component.fit_df(df_train)
         return component, component.predict_df(df_test)
 
