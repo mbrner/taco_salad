@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import pandas as pd
+import logging
 
+import pandas as pd
+import numpy as np
 
 class BaseComponent(object):
     """Basic Component.
@@ -24,9 +26,11 @@ class BaseComponent(object):
 
     def fit_df(self, *args, **kwargs):
         assert self.active, 'Trying to fit an inactive component!'
+        logging.info('Fitting component \'{}\'.'.format(self.name))
 
     def predict_df(self, *args, **kwargs):
         assert self.active, 'Trying to predict with an inactive component!'
+        logging.info('Predicting with component \'{}\'.'.format(self.name))
 
     def activate(self):
         self.deactivate()
@@ -140,7 +144,7 @@ class Component(BaseComponent):
             Self.
 
         """
-        super(BaseComponent, self).fit_df()
+        super(Component, self).fit_df()
         if self.active:
             X = df.loc[:, self.attributes]
             y = df.loc[:, self.label]
@@ -165,11 +169,11 @@ class Component(BaseComponent):
             Dataframe of the scores.
 
         """
-        super(BaseComponent, self).predict_df()
+        super(Component, self).predict_df()
         if self.active:
             idx = df.index
             X = df.loc[:, self.attributes]
-            return_clf = self.predict_func(X.values)
+            return_clf = np.array(self.predict_func(X.values))
             return_df = pd.DataFrame(columns=self.returns,
                                      index=idx)
             if len(self.returns) == 1:
@@ -180,3 +184,10 @@ class Component(BaseComponent):
             return return_df
         else:
             return None
+
+    def get_needed_features(self):
+        features = [att for att in self.attributes]
+        features.append(self.label)
+        if self.weight is not None:
+            features.append(self.weight)
+        return features

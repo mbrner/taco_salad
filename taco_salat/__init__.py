@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import warnings
-import copy
+import logging
 
 import pandas as pd
 
@@ -82,13 +82,13 @@ class TacoSalat(Recipe):
 
     """
     def __init__(self,
-                 kfold=10,
                  df=None,
                  roles=None,
                  attributes=[],
                  labels=[],
                  weights=[],
-                 misc=[]):
+                 misc=[],
+                 kfold=10):
         self.kfold = kfold
 
         super(TacoSalat, self).__init__()
@@ -109,6 +109,7 @@ class TacoSalat(Recipe):
                                              component=misc_component)
 
         if df is not None and roles is not None:
+            logging.info('TacoSalat initialized with a Dataframe.')
             assert isinstance(df, pd.DataFrame) or isinstance(df, list), \
                 '\'df\' has to be a Pandas.DataFrame or a list with the ' \
                 'column names'
@@ -133,6 +134,7 @@ class TacoSalat(Recipe):
                                     name_component=name,
                                     role=role)
         else:
+            logging.info('TacoSalat initialized with feature lists.')
             for att in attributes:
                 self.add_ingredient(unique_name=att,
                                     layer=base_layer,
@@ -369,32 +371,32 @@ class TacoSalat(Recipe):
             'clear_df' is False.
 
         """
+        logging.info('Fitting the wiht a DataFrame with {} folds.'.format(
+                     self.kfold))
         df_input_cols = df.columns
-        kf = KFold(n_split=self.kfold, shuffle=True)
+        kf = KFold(n_splits=self.kfold, shuffle=True)
         for i, layer in enumerate(self.layer_order):
             if layer.active:
-                if final_mode.lower() == 'all':
-                    final_model = True
-                elif final_mode.lower() == 'last' or final_mode:
+                if final_mode is None:
+                    final_model = False
+                elif final_mode == 'all':
+                    final_mode = True
+                elif final_mode == 'last' or final_mode:
                     if layer == self.layer_order[-1]:
                         final_model = True
                     else:
                         final_model = False
-                else:
-                    final_model = False
                 layer_df = layer.fit_df(df,
                                         kfold=kf,
                                         final_model=final_model)
                 if isinstance(layer_df, pd.DataFrame):
-                    layer_entries = self.get('{}.*'.format(layer.name))
-                    layer_obs = [name for name, _ in layer_entries.iterrows()]
-                    layer_df = layer_df.loc[:, layer_obs]
-                    df.join(layer_df)
+                    df = pd.concat([df, layer_df], axis=1)
         if clear_df:
             df_final_cols = df.columns
             drop_cols = [col for col in df_final_cols
                          if col not in df_input_cols]
             df = df.drop(drop_cols)
+        return df
 
     def predict_df(self, df, clear_df=False):
         """Method to apply the complete salat to a dataframe.
@@ -418,22 +420,17 @@ class TacoSalat(Recipe):
             The input dataframe with the scores for all layers
             (clear_df=False) or only the last layers scores
             (clear_df=True).
-
         """
-
         df_input_cols = df.columns
         for layer in self.layer_order:
             if layer.active:
                 layer_df = layer.predict_df(df)
                 if isinstance(layer_df, pd.DataFrame):
-                    layer_entries = self.get('{}:*'.format(layer.name))
-                    layer_obs = [name for name, _ in layer_entries.iterrows()]
-                    layer_df = layer_df.loc[:, layer_obs]
-                    df = df.join(layer_df)
+                    df = pd.concat([df, layer_df], axis=1)
         if clear_df:
             df_final_cols = df.columns
             drop_cols = [col for col in df_final_cols
-                         if col not in df_input_cols not in layer_obs]
+                         if col not in df_input_cols not in layer_df.columns]
             df = df.drop(drop_cols)
         return df
 

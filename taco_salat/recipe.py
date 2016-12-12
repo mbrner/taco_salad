@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import pandas as pd
+import logging
+
 from fnmatch import fnmatch
+
+import pandas as pd
+
 from .component import BaseComponent
 from .layer import BaseLayer
 
@@ -46,11 +50,14 @@ class Recipe(object):
             Added layer.
 
         """
+
         if layer.name in self.layer_dict.keys():
             raise KeyError('{} already exists'.format(layer.name))
         self.layer_dict[layer.name] = layer
         self.n_layers += 1
         self.layer_order.append(layer)
+        logging.info('Layer \'{}\' added to the Recipe ({}-th layer).'.format(
+                     layer.name, self.n_layers - 1))
         return self.layer_dict[layer.name]
 
     def get_layer(self, name):
@@ -116,6 +123,8 @@ class Recipe(object):
         if not isinstance(layer, BaseLayer):
             layer = self.get_layer(layer)
         layer.add_component(component)
+        logging.info('Component \'{}\' added to \'{}\'.'.format(
+                     component.name, layer.name))
         return layer
 
     def get_component(self, layer, name):
@@ -218,7 +227,7 @@ class Recipe(object):
             return None
         df = self.ingredients
         if unique_name is None:
-            unique_name = str(len(df))
+            unique_name = 'score_{}'.format(len(df))
         assert unique_name not in df.index, \
             '{} already exists'.format(unique_name)
 
@@ -261,6 +270,7 @@ class Recipe(object):
                 long_name=component_long_name,
                 layer=layer,
                 component=component)
+            dependency_col = '{}:{}'.format(layer.name, component.name)
         relevant_features = [self.get(dep) for dep in dependencies]
         relevant_features = pd.concat(relevant_features, axis=0)
         relevant_features = relevant_features.drop_duplicates().index

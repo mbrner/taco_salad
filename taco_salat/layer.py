@@ -1,10 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ProcessPoolExecutor, as_completed, wait
 from fnmatch import fnmatch
+import logging
+import copy
 
 import pandas as pd
 import numpy as np
+
+from IPython import embed
 
 from .component import BaseComponent
 
@@ -68,9 +72,11 @@ class BaseLayer(object):
 
     def fit_df(self, *args, **kwargs):
         assert self.active, 'Trying to fit an inactive layer!'
+        logging.info('Fitting layer \'{}\'.'.format(self.name))
 
     def predict_df(self, *args, **kwargs):
         assert self.active, 'Trying to predict with an inactive layer!'
+        logging.info('Predicting with layer \'{}\'.'.format(self.name))
 
     def activate_component(self, component_name='*'):
         for key, component in self.component_dict.items():
@@ -150,7 +156,10 @@ class Layer(BaseLayer):
 
         """
         super(Layer, self).fit_df()
-        new_df = pd.DataFrame()
+        returns = []
+        for _, comp in self.component_dict.items():
+            returns.extend(comp.returns)
+        new_df = pd.DataFrame(index=df.index, columns=returns)
         for train, test in kfold.split(np.empty(df.shape)):
             df_train = df.loc[train, :]
             df_test = df.loc[test, :]
@@ -158,11 +167,13 @@ class Layer(BaseLayer):
                 if component.active:
                     component.fit_df(df_train)
                     comp_df = component.predict_df(df_test)
-                    new_df = new_df.join(comp_df)
+                    return_names = component.returns
+                    new_df.loc[comp_df.index, return_names] = comp_df
         if final_model:
             for key, component in self.component_dict.items():
                 if component.active:
                     component = component.fit_df(df)
+
                     self.component_dict[component.name] = component
         return new_df
 
@@ -248,6 +259,12 @@ class LayerParallel(Layer):
         self.fit_parallel = fit_parallel
         self.predict_parallel = predict_parallel
 
+    def fit_predict_single_component(self, component, df_train, df_test):
+        df_train = copy.deepcopy(df_train)
+        df_test = copy.deepcopy(df_test)
+        component = component.fit_df(df_train)
+        return component, component.predict_df(df_test)
+
     def fit_df(self, df, kfold, final_model=False):
         """Method to fit all the components.
 
@@ -270,42 +287,35 @@ class LayerParallel(Layer):
 
         """
         super(Layer, self).fit_df()
+
         if self.fit_parallel:
-            new_df = pd.DataFrame()
-
-            def fit_predict_single_component(component, df_train, df_test):
-                component = component.fit_df(df_train)
-                return component, component.predict_df(df_test)
-
-            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+            returns = []
+            for _, comp in self.component_dict.items():
+                returns.extend(comp.returns)
+            new_df = pd.DataFrame(index=df.index, columns=returns)
+            with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
                 futures = []
                 for train, test in kfold.split(np.empty(df.shape)):
                     df_train = df.loc[train, :]
                     df_test = df.loc[test, :]
                     for key, component in self.component_dict.items():
                         if component.active:
-                            sel_att = component.attributes
-                            sel_att.append(component.label)
-                            if component.weight is not None:
-                                sel_att.append(component.weight)
+                            sel_att = component.get_needed_features()
                             futures.append(executor.submit(
-                                fit_predict_single_component,
+                                self.fit_predict_single_component,
                                 component=component,
                                 df_train=df_train.loc[:, sel_att],
                                 df_test=df_test.loc[:, sel_att]))
-                results = wait(futures)
-            for i, future_i in enumerate(results.done):
+            for future_i in as_completed(futures):
                 component, comp_df = future_i.result()
                 self.component_dict[component.name] = component
-                new_df = new_df.join(comp_df)
+                return_names = component.returns
+                new_df.loc[comp_df.index, return_names] = comp_df
             if final_model:
-                with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+                with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
                     for key, component in self.component_dict.items():
                         if component.active:
-                            sel_att = component.attributes
-                            sel_att.append(component.label)
-                            if component.weight is not None:
-                                sel_att.append(component.weight)
+                            sel_att = component.get_needed_features()
                             component.fit_df(df.loc[:, sel_att])
                     results = wait(futures)
                 for i, future_i in enumerate(results.done):
@@ -334,14 +344,11 @@ class LayerParallel(Layer):
         super(Layer, self).predict_df()
         if self.predict_parallel:
             new_df = pd.DataFrame()
-            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+            with ProcessPoolExecutor(max_workers=self.n_jobs) as executor:
                 futures = []
-                for key, component in self.predict_df.items():
+                for key, component in self.component_dict.items():
                     if component.active:
-                        sel_att = component.attributes
-                        sel_att.append(component.label)
-                        if component.weight is not None:
-                            sel_att.append(component.weight)
+                        sel_att = component.get_needed_features()
                         futures.append(executor.submit(component.predict_df,
                                                        df=df.loc[:, sel_att]))
                 results = wait(futures)
