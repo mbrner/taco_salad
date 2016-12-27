@@ -314,7 +314,7 @@ class ConfidenceCutter(object):
         else:
             idx_bootstraps = []
             cut_values = np.zeros((len(self.cut_opts.positions),
-                                        n_bootstraps))
+                                   n_bootstraps))
             for i in range(self.cut_opts.n_bootstraps):
                 bootstrap = np.random.choice(n_events, n_events, replace=True)
                 idx_bootstraps.append(np.sort(bootstrap))
@@ -405,8 +405,6 @@ class ConfidenceCutter(object):
     def __determine_cut_values_mp__(self, X, y_true, sample_weight):
         edges = self.cut_opts.edges
         positions = self.cut_opts.positions
-        X_o = X[:, 1]
-        X_c = X[:, 0]
         n_points = 5
 
         cut_values = np.zeros_like(positions)

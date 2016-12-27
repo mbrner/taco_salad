@@ -4,6 +4,7 @@ import numpy as np
 
 import numexpr as ne
 
+
 def purity_criteria(threshold=0.99):
     """Returns decisison function which returns the absolute difference between the achieved and desired purity.
     Parameters

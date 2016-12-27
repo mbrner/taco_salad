@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from concurrent.futures import ThreadPoolExecutor
-
+from copy import deepcopy
 import numpy as np
-
-from sklearn.metrics import confusion_matrix
-
-from scipy.optimize import minimize
 
 
 class Curve:
@@ -31,6 +26,7 @@ class Curve:
         order = np.argsort(x)
         self.x = x[order]
         self.y = y[order]
+        self.mode = mode
         self.setup_curve(mode)
 
     def setup_curve(self, mode='linear'):
@@ -63,8 +59,56 @@ class Curve:
     def __setup_hist__(self):
         self.edges = (self.x[1:] + self.x[:-1]) / 2.
 
+    def __add__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, Curve):
+            assert len(self.x) == len(other.x), 'Only curves with same x ' \
+                                                'can be added.'
+            assert (self.x == other.x).all(), 'Only curves with same x ' \
+                                              'can be added.'
+            assert other.mode == self.mode, 'Only curves with same mode' \
+                                            'can be added'
 
-class CurveSliding:
+            if self.mode == 'hist':
+                copy.y += other.y
+            elif self.mode == 'linear':
+                copy.slope += other.slope
+                copy.offset += other.offset
+        else:
+            copy = deepcopy(self)
+            value = float(other)
+            if self.mode == 'hist':
+                copy.y += value
+            elif self.mode == 'linear':
+                copy.offset += value
+        return copy
+
+    def __sub__(self, other):
+        if isinstance(other, Curve):
+            assert len(self.x) == len(other.x), 'Only curves with same x ' \
+                                                'can be subtracted.'
+            assert (self.x == other.x).all(), 'Only curves with same x ' \
+                                              'can be subtracted.'
+            assert other.mode == self.mode, 'Only curves with same mode' \
+                                            'can be subtracted'
+        return self.__add__(other * (-1))
+
+    def __mul__(self, value):
+        value = float(value)
+        copy = deepcopy(self)
+        if self.mode == 'hist':
+            copy.y *= value
+        elif self.mode == 'linear':
+            copy.slope *= value
+            copy.offset *= value
+        return copy
+
+    def __div__(self, value):
+        value = float(value)
+        return self.__mul__(1. / value)
+
+
+class CurveSliding(Curve):
     """Class to treat a curve defined by a finite number ob (x, y) pairs
     as a continious y=f(x).
 
@@ -84,23 +128,16 @@ class CurveSliding:
         hist = stepwise, only input y are possible returns when evaluted
         linear = linear interpolation between neigbouring X values.
     """
-    def __init__(self, edges, y, mode='linear'):
-        self.edges = edges
-        self.y = y
+    def __init__(self, edges, y_input, mode='linear'):
         self.mode = mode
-        self.curve = self.setup_curve(mode)
+        self.x, self.y = self.setup_x_y(edges, y_input)
+        self.setup_curve(mode)
 
-    def setup_curve(self, mode='linear'):
-        switch_points = np.sort(np.unique(self.edges))[:-1]
+    def setup_x_y(self, edges, y_input):
+        switch_points = np.sort(np.unique(edges))[:-1]
         y_values = np.zeros_like(switch_points)
         for i, x_i in enumerate(switch_points):
-            idx = np.logical_and(self.edges[:, 0] <= x_i,
-                                 self.edges[:, 1] > x_i)
-            y_values[i] = np.mean(self.y[idx])
-        return Curve(switch_points, y_values, mode=mode)
-
-    def evaluate(self, x):
-        return self.curve(x)
-
-    def __call__(self, x):
-        return self.evaluate(x)
+            idx = np.logical_and(edges[:, 0] <= x_i,
+                                 edges[:, 1] > x_i)
+            y_values[i] = np.mean(y_input[idx])
+        return switch_points, y_values
