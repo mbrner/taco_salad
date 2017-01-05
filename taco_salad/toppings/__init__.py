@@ -380,6 +380,8 @@ class ConfidenceCutter(object):
 
     def __find_best_cut_inner__(self, eval_func, conf, n_points=100):
         n_confs = len(conf)
+        if n_confs == 0:
+            return np.nan
         step_width = int(n_confs / (n_points - 1))
         if step_width == 0:
             final = True
@@ -402,6 +404,33 @@ class ConfidenceCutter(object):
                 conf = conf[idx[idx_min - 1]:idx[idx_min + 1]]
             return self.__find_best_cut_inner__(eval_func, conf, n_points)
 
+    def fill_gaps(self, cut_values):
+        not_nan_mask = np.array(np.isfinite(cut_values), dtype=int)
+        idx_not_nan = np.where(not_nan_mask == 1)[0]
+        first_value_idx = idx_not_nan[0]
+        last_value_idx = idx_not_nan[-1]
+        if first_value_idx != 0:
+            cut_values[:first_value_idx] = cut_values[first_value_idx]
+            not_nan_mask[:first_value_idx] = 1
+
+        if last_value_idx != 0:
+            cut_values[last_value_idx:] = cut_values[last_value_idx]
+            not_nan_mask[last_value_idx:] = 1
+
+        diff = np.diff(not_nan_mask)
+        falling = np.where(diff == -1)[0]
+        rising = np.where(diff == 1)[0]
+        for fall, rise in zip(falling, rising):
+            idx_first_nan = fall + 1
+            idx_last_nan = rise
+            value_before = cut_values[idx_first_nan - 1]
+            value_after = cut_values[idx_last_nan + 1]
+            gap_length = rise - fall
+            slope = (value_after - value_before) / (gap_length + 1)
+            for i in range(gap_length):
+                cut_values[idx_first_nan + i] = value_before + (i + 1) * slope
+        return cut_values
+
     def __determine_cut_values_mp__(self, X, y_true, sample_weight):
         edges = self.cut_opts.edges
         positions = self.cut_opts.positions
@@ -415,7 +444,9 @@ class ConfidenceCutter(object):
                                                n_points=n_points)
 
             cut_values[i] = cut_value
-        return cut_values
+        cut_values_filled = self.fill_gaps(cut_values)
+
+        return cut_values_filled
 
 
 
