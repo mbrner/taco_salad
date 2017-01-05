@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 
 import numpy as np
 from . import criteria
-from .curve import CurveSliding
+from .curve import CurveSliding, Curve
 
 
 class ConfidenceCutter(object):
@@ -91,7 +91,7 @@ class ConfidenceCutter(object):
         """
         cut_curve = self.cut_opts.cut_curve
         np.savez(filename,
-                 edges=cut_curve.edges,
+                 x=cut_curve.x,
                  y=cut_curve.y,
                  conf_index=self.conf_index)
 
@@ -106,7 +106,7 @@ class ConfidenceCutter(object):
         if not filename.endswith('.npz'):
             filename += '.npz'
         npzfile = np.load(filename)
-        curve = CurveSliding(npzfile['edges'], npzfile['y'])
+        curve = Curve(npzfile['x'], npzfile['y'])
         self.cut_opts.cut_curve = curve
         self.conf_index = int(npzfile['conf_index'])
 
