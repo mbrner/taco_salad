@@ -154,5 +154,5 @@ class CurveSliding(Curve):
                 y_values[i] = np.mean(y_input[idx])
             return switch_points, y_values
         elif self.combination_mode == 'single':
-            window_mids = edges[:, 1] - edges[:, 0]
-            return window_mids, y_values
+            window_mids = (edges[:, 1] - edges[:, 0]) / 2.
+            return window_mids, y_input
