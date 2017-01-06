@@ -26,7 +26,9 @@ class Curve:
         order = np.argsort(x)
         self.x = x[order]
         self.y = y[order]
-        self.mode = mode
+        self.mode = mode.lower()
+        assert self.mode in ['hist', 'linear'], \
+            'Invalid mode [\'hist\', \'linear\']'
         self.setup_curve(mode)
 
     def setup_curve(self, mode='linear'):
@@ -128,16 +130,29 @@ class CurveSliding(Curve):
         hist = stepwise, only input y are possible returns when evaluted
         linear = linear interpolation between neigbouring X values.
     """
-    def __init__(self, edges, y_input, mode='linear'):
-        self.mode = mode
+    def __init__(self,
+                 edges,
+                 y_input,
+                 mode='linear',
+                 combination_mode='single'):
+        self.combination_mode = combination_mode
+        self.mode = mode.lower()
+        assert self.mode in ['hist', 'linear'], \
+            'Invalid mode [\'hist\', \'linear\']'
+        assert self.combination_mode in ['overlapping', 'single'], \
+            'Invalid mode [\'overlapping\', \'single\']'
         self.x, self.y = self.setup_x_y(edges, y_input)
         self.setup_curve(mode)
 
     def setup_x_y(self, edges, y_input):
-        switch_points = np.sort(np.unique(edges))[:-1]
-        y_values = np.zeros_like(switch_points)
-        for i, x_i in enumerate(switch_points):
-            idx = np.logical_and(edges[:, 0] <= x_i,
-                                 edges[:, 1] > x_i)
-            y_values[i] = np.mean(y_input[idx])
-        return switch_points, y_values
+        if self.combination_mode == 'overlapping':
+            switch_points = np.sort(np.unique(edges))[:-1]
+            y_values = np.zeros_like(switch_points)
+            for i, x_i in enumerate(switch_points):
+                idx = np.logical_and(edges[:, 0] <= x_i,
+                                     edges[:, 1] > x_i)
+                y_values[i] = np.mean(y_input[idx])
+            return switch_points, y_values
+        elif self.combination_mode == 'single':
+            window_mids = edges[:, 1] - edges[:, 0]
+            return window_mids, y_values
