@@ -134,7 +134,7 @@ class CurveSliding(Curve):
                  edges,
                  y_input,
                  mode='linear',
-                 combination_mode='single'):
+                 combination_mode='overlapping'):
         self.combination_mode = combination_mode
         self.mode = mode.lower()
         assert self.mode in ['hist', 'linear'], \
