@@ -127,7 +127,7 @@ class CurveSliding(Curve):
                  edges,
                  y_input,
                  mode='linear',
-                 combination_mode='overlapping'):
+                 combination_mode='single'):
         self.combination_mode = combination_mode
         self.mode = mode.lower()
         assert self.mode in ['hist', 'linear'], \
@@ -147,5 +147,5 @@ class CurveSliding(Curve):
                 y_values[i] = np.mean(y_input[idx])
             return switch_points, y_values
         elif self.combination_mode == 'single':
-            window_mids = (edges[:, 1] - edges[:, 0]) / 2.
+            window_mids = (edges[:, 1] + edges[:, 0]) / 2.
             return window_mids, y_input
