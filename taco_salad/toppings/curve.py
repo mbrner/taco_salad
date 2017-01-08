@@ -99,7 +99,7 @@ class Curve:
     def __mul__(self, other):
         return self.__calc__(other, operation='*')
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         return self.__calc__(other, operation='/')
 
     def __iadd__(self, other):
@@ -111,7 +111,7 @@ class Curve:
     def __imul__(self, other):
         return self.__calc__(other, operation='*')
 
-    def __idiv__(self, other):
+    def __itruediv__(self, other):
         return self.__calc__(other, operation='/')
 
 

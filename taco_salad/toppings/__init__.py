@@ -494,7 +494,7 @@ class ConfidenceCutter(object):
                                 'ConfidenceCutter]')
         return copy
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         copy = deepcopy(self)
         if isinstance(other, ConfidenceCutter):
             if copy.cut_opts.curve is None:
@@ -551,7 +551,7 @@ class ConfidenceCutter(object):
                                 'ConfidenceCutter]')
         return self
 
-    def __idiv__(self, other):
+    def __itruediv__(self, other):
         if isinstance(other, ConfidenceCutter):
             if self.cut_opts.curve is None:
                 self.cut_opts.curve = deepcopy(other.cut_opts.curve)
