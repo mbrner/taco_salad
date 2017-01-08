@@ -68,11 +68,13 @@ class ConfidenceCutter(object):
                  positions=None,
                  conf_index=0,
                  n_jobs=0,
-                 curve_file=None):
+                 curve_file=None,
+                 combination_mode='overlapping'):
         self.cut_opts = self.CutOpts(n_steps=n_steps,
                                      window_size=window_size,
                                      n_bootstraps=n_bootstraps,
-                                     positions=positions)
+                                     positions=positions,
+                                     combination_mode=combination_mode)
 
         self.criteria = criteria
         self.conf_index = conf_index
@@ -166,7 +168,8 @@ class ConfidenceCutter(object):
                      window_size=0.1,
                      n_bootstraps=10,
                      positions=None,
-                     curve_type='mid'):
+                     curve_type='mid',
+                     combination_mode='overlapping'):
             if positions is not None:
                 self.positions = positions
                 self.n_steps = len(self.positions)
@@ -177,6 +180,7 @@ class ConfidenceCutter(object):
             self.edges = None
             self.positions = positions
             self.curve_type = curve_type
+            self.combination_mode = combination_mode
             self.curve = None
 
         def init_sliding_windows(self, X_o=None, sample_weight=None):
@@ -244,7 +248,9 @@ class ConfidenceCutter(object):
             """
             if self.n_bootstraps > 0:
                 cut_values = np.mean(cut_values, axis=1)
-            self.curve = CurveSliding(self.edges, cut_values)
+            self.curve = CurveSliding(self.edges,
+                                      cut_values,
+                                      combination_mode=self.combination_mode)
             return self.curve
 
     def predict(self, X):
