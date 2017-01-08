@@ -90,7 +90,7 @@ class ConfidenceCutter(object):
         filename: str
             Path where the curve is saved.
         """
-        cut_curve = self.cut_opts.cut_curve
+        cut_curve = self.cut_opts.curve
         np.savez(filename,
                  x=cut_curve.x,
                  y=cut_curve.y,
@@ -108,7 +108,7 @@ class ConfidenceCutter(object):
             filename += '.npz'
         npzfile = np.load(filename)
         curve = Curve(npzfile['x'], npzfile['y'])
-        self.cut_opts.cut_curve = curve
+        self.cut_opts.curve = curve
         self.conf_index = int(npzfile['conf_index'])
 
     class CutOpts(object):
@@ -177,7 +177,7 @@ class ConfidenceCutter(object):
             self.edges = None
             self.positions = positions
             self.curve_type = curve_type
-            self.cut_curve = None
+            self.curve = None
 
         def init_sliding_windows(self, X_o=None, sample_weight=None):
             """Initilizes the sliding windows.
@@ -244,8 +244,8 @@ class ConfidenceCutter(object):
             """
             if self.n_bootstraps > 0:
                 cut_values = np.mean(cut_values, axis=1)
-            self.cut_curve = CurveSliding(self.edges, cut_values)
-            return self.cut_curve
+            self.curve = CurveSliding(self.edges, cut_values)
+            return self.curve
 
     def predict(self, X):
         """Predict class for X.
@@ -270,7 +270,7 @@ class ConfidenceCutter(object):
             X = new_X
         X_o = X[:, 1]
         X_c = X[:, 0]
-        thresholds = self.cut_opts.cut_curve(X_o)
+        thresholds = self.cut_opts.curve(X_o)
         y_pred = np.array(X_c >= thresholds, dtype=int)
         return y_pred
 
