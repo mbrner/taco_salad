@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor, wait
+from copy import deepcopy
 
 import numpy as np
 from . import criteria
@@ -448,7 +449,68 @@ class ConfidenceCutter(object):
 
         return cut_values_filled
 
+    def __add__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve += other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve += other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
 
+    def __sub__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve -= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve -= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __mul__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve *= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve *= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __div__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve /= deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve /= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve += other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __call__(self, x):
+        return self.cut_opts.curve(x)
 
     def get_params():
         pass
