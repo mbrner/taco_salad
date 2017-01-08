@@ -69,12 +69,14 @@ class ConfidenceCutter(object):
                  conf_index=0,
                  n_jobs=0,
                  curve_file=None,
-                 combination_mode='overlapping'):
+                 combination_mode='overlapping',
+                 min_examples=10):
         self.cut_opts = self.CutOpts(n_steps=n_steps,
                                      window_size=window_size,
                                      n_bootstraps=n_bootstraps,
                                      positions=positions,
-                                     combination_mode=combination_mode)
+                                     combination_mode=combination_mode,
+                                     min_examples=min_examples)
 
         self.criteria = criteria
         self.conf_index = conf_index
@@ -169,7 +171,8 @@ class ConfidenceCutter(object):
                      n_bootstraps=10,
                      positions=None,
                      curve_type='mid',
-                     combination_mode='overlapping'):
+                     combination_mode='overlapping',
+                     min_examples=10):
             if positions is not None:
                 self.positions = positions
                 self.n_steps = len(self.positions)
@@ -181,6 +184,7 @@ class ConfidenceCutter(object):
             self.positions = positions
             self.curve_type = curve_type
             self.combination_mode = combination_mode
+            self.min_examples = min_examples
             self.curve = None
 
         def init_sliding_windows(self, X_o=None, sample_weight=None):
@@ -387,7 +391,7 @@ class ConfidenceCutter(object):
 
     def __find_best_cut_inner__(self, eval_func, conf, n_points=100):
         n_confs = len(conf)
-        if n_confs == 0:
+        if n_confs <= self.cut_opts.min_examples:
             return np.nan
         step_width = int(n_confs / (n_points - 1))
         if step_width == 0:
