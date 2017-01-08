@@ -509,6 +509,62 @@ class ConfidenceCutter(object):
                                 'ConfidenceCutter]')
         return copy
 
+    def __iadd__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve += other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve += other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __isub__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve -= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve -= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __imul__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve *= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve *= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __idiv__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve /= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve /= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
     def __call__(self, x):
         return self.cut_opts.curve(x)
 

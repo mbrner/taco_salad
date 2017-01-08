@@ -102,6 +102,18 @@ class Curve:
     def __div__(self, other):
         return self.__calc__(other, operation='/')
 
+    def __iadd__(self, other):
+        return self.__calc__(other, operation='+')
+
+    def __isub__(self, other):
+        return self.__calc__(other, operation='-')
+
+    def __imul__(self, other):
+        return self.__calc__(other, operation='*')
+
+    def __idiv__(self, other):
+        return self.__calc__(other, operation='/')
+
 
 class CurveSliding(Curve):
     """Class to treat a curve defined by a finite number ob (x, y) pairs
