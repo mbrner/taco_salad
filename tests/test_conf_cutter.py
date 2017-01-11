@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 
 from scipy.integrate import quad
 
-from toppings import ConfidenceCutter, criteria
+from taco_salad.toppings import ConfidenceCutter, criteria
 
 def generate(n, purity, x_lims=[-1., 1]):
     d = (-1) * (0.5 * np.sqrt(1 - purity)) / (np.sqrt(1 - purity) - np.sqrt(2))
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 
 
     x_cut_curve = np.linspace(-1., 1., 1000)
-    y_cut_curve = conf_cutter.cut_opts.cut_curve(x_cut_curve)
+    y_cut_curve = conf_cutter.cut_opts.curve(x_cut_curve)
 
 
     plt.hexbin(y_pred, x, gridsize=50, cmap=plt.cm.viridis)
@@ -224,7 +224,7 @@ if __name__ == '__main__':
 
     x_curves = np.linspace(-1, 1, 1000)
     y_cut_true = np.array([conf_cut_func(x_i) for x_i in x_curves])
-    y_cut_curve = conf_cutter_reloaded.cut_opts.cut_curve(x_curves)
+    y_cut_curve = conf_cutter_reloaded.cut_opts.curve(x_curves)
     y_naive_cut = np.ones_like(x_curves) * naive_cut
 
 
