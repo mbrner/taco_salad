@@ -456,6 +456,11 @@ class ConfidenceCutter(object):
                                                n_points=n_points)
 
             cut_values[i] = cut_value
+        n_valid_cuts = np.sum(np.isfinite(cut_values))
+        if n_valid_cuts == 0:
+            raise RuntimeError('No valid cuts found! If manual positions '
+                                'being used, they are not in the range of the '
+                                'examples!')
         cut_values_filled = self.fill_gaps(cut_values)
 
         return cut_values_filled
