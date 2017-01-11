@@ -375,6 +375,8 @@ class ConfidenceCutter(object):
             weights_i = sample_weight[idx]
 
         possible_cuts = np.sort(np.unique(confidence_i))
+        if len(possible_cuts) <= self.cut_opts.min_examples:
+            return np.nan
 
         def wrapped_decision_func(cut):
             y_pred_i_j = np.array(confidence_i >= cut, dtype=int)
@@ -382,7 +384,6 @@ class ConfidenceCutter(object):
                                  y_pred_i_j,
                                  position,
                                  sample_weights=weights_i)
-
         cut_value = self.__find_best_cut_inner__(wrapped_decision_func,
                                                  possible_cuts,
                                                  n_points=n_points)
@@ -391,9 +392,9 @@ class ConfidenceCutter(object):
 
     def __find_best_cut_inner__(self, eval_func, conf, n_points=100):
         n_confs = len(conf)
-        if n_confs <= self.cut_opts.min_examples:
-            return np.nan
         step_width = int(n_confs / (n_points - 1))
+        if len(conf) == 0:
+            return np.nan
         if step_width == 0:
             final = True
             selected_cuts = conf
