@@ -149,8 +149,8 @@ if __name__ == '__main__':
                                                       threshold=0.95)
     pur_crit = criteria.purity_criteria(threshold=0.90)
 
-    conf_cutter = ConfidenceCutter(n_steps=1,
-                                   window_size=2,
+    conf_cutter = ConfidenceCutter(n_steps=100,
+                                   window_size=0.1,
                                    n_bootstraps=1,
                                    criteria=pur_crit,
                                    conf_index=1,
