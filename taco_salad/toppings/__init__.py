@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from concurrent.futures import ThreadPoolExecutor, wait
+from copy import deepcopy
 
 import numpy as np
 from . import criteria
@@ -67,11 +68,15 @@ class ConfidenceCutter(object):
                  positions=None,
                  conf_index=0,
                  n_jobs=0,
-                 curve_file=None):
+                 curve_file=None,
+                 combination_mode='overlapping',
+                 min_examples=10):
         self.cut_opts = self.CutOpts(n_steps=n_steps,
                                      window_size=window_size,
                                      n_bootstraps=n_bootstraps,
-                                     positions=positions)
+                                     positions=positions,
+                                     combination_mode=combination_mode,
+                                     min_examples=min_examples)
 
         self.criteria = criteria
         self.conf_index = conf_index
@@ -89,7 +94,7 @@ class ConfidenceCutter(object):
         filename: str
             Path where the curve is saved.
         """
-        cut_curve = self.cut_opts.cut_curve
+        cut_curve = self.cut_opts.curve
         np.savez(filename,
                  x=cut_curve.x,
                  y=cut_curve.y,
@@ -108,7 +113,7 @@ class ConfidenceCutter(object):
             filename += '.npz'
         npzfile = np.load(filename)
         curve = Curve(npzfile['x'], npzfile['y'])
-        self.cut_opts.cut_curve = curve
+        self.cut_opts.curve = curve
         self.conf_index = int(npzfile['conf_index'])
 
     class CutOpts(object):
@@ -166,7 +171,9 @@ class ConfidenceCutter(object):
                      window_size=0.1,
                      n_bootstraps=10,
                      positions=None,
-                     curve_type='mid'):
+                     curve_type='mid',
+                     combination_mode='overlapping',
+                     min_examples=10):
             if positions is not None:
                 self.positions = positions
                 self.n_steps = len(self.positions)
@@ -177,7 +184,9 @@ class ConfidenceCutter(object):
             self.edges = None
             self.positions = positions
             self.curve_type = curve_type
-            self.cut_curve = None
+            self.combination_mode = combination_mode
+            self.min_examples = min_examples
+            self.curve = None
 
         def init_sliding_windows(self, X_o=None, sample_weight=None):
             """Initilizes the sliding windows.
@@ -244,8 +253,10 @@ class ConfidenceCutter(object):
             """
             if self.n_bootstraps > 0:
                 cut_values = np.mean(cut_values, axis=1)
-            self.cut_curve = CurveSliding(self.edges, cut_values)
-            return self.cut_curve
+            self.curve = CurveSliding(self.edges,
+                                      cut_values,
+                                      combination_mode=self.combination_mode)
+            return self.curve
 
     def predict(self, X):
         """Predict class for X.
@@ -270,7 +281,7 @@ class ConfidenceCutter(object):
             X = new_X
         X_o = X[:, 1]
         X_c = X[:, 0]
-        thresholds = self.cut_opts.cut_curve(X_o)
+        thresholds = self.cut_opts.curve(X_o)
         y_pred = np.array(X_c >= thresholds, dtype=int)
         return y_pred
 
@@ -296,6 +307,8 @@ class ConfidenceCutter(object):
         """
         assert X.shape[1] == 2, 'X must have the shape (n_events, 2)'
         assert len(y) == X.shape[0], 'len(X) and len(y) must be the same'
+
+
         if sample_weight is not None:
             assert len(y) == len(sample_weight), 'weights and y need the' \
                 'same length'
@@ -306,6 +319,8 @@ class ConfidenceCutter(object):
             new_X[:, 0] = X[:, 1]
             X = new_X
 
+        assert len(np.unique(X[:, 0])) >= 5, 'Less than five different ' \
+            ' confidence values!'
         n_events = X.shape[0]
         self.cut_opts.init_sliding_windows(X[:, 1], sample_weight)
         n_bootstraps = self.cut_opts.n_bootstraps
@@ -365,6 +380,8 @@ class ConfidenceCutter(object):
             weights_i = sample_weight[idx]
 
         possible_cuts = np.sort(np.unique(confidence_i))
+        if len(possible_cuts) <= self.cut_opts.min_examples:
+            return np.nan
 
         def wrapped_decision_func(cut):
             y_pred_i_j = np.array(confidence_i >= cut, dtype=int)
@@ -372,7 +389,6 @@ class ConfidenceCutter(object):
                                  y_pred_i_j,
                                  position,
                                  sample_weights=weights_i)
-
         cut_value = self.__find_best_cut_inner__(wrapped_decision_func,
                                                  possible_cuts,
                                                  n_points=n_points)
@@ -381,9 +397,9 @@ class ConfidenceCutter(object):
 
     def __find_best_cut_inner__(self, eval_func, conf, n_points=100):
         n_confs = len(conf)
-        if n_confs == 0:
-            return np.nan
         step_width = int(n_confs / (n_points - 1))
+        if len(conf) == 0:
+            return np.nan
         if step_width == 0:
             final = True
             selected_cuts = conf
@@ -445,9 +461,130 @@ class ConfidenceCutter(object):
                                                n_points=n_points)
 
             cut_values[i] = cut_value
+        n_valid_cuts = np.sum(np.isfinite(cut_values))
+        if n_valid_cuts == 0:
+            raise RuntimeError('No valid cuts found! If manual positions '
+                               'being used, they are not in the range of the '
+                               'examples!')
         cut_values_filled = self.fill_gaps(cut_values)
 
         return cut_values_filled
 
-    def get_params():
-        pass
+    def __add__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve += other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve += other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __sub__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve -= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve -= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __mul__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve *= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve *= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __truediv__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve /= deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve /= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve += other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
+    def __iadd__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve += other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve += other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __isub__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve -= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve -= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __imul__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve *= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve *= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __itruediv__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve /= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve /= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __call__(self, x):
+        return self.cut_opts.curve(x)

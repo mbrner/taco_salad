@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from copy import deepcopy
+
 import numpy as np
 
 
@@ -26,7 +27,9 @@ class Curve:
         order = np.argsort(x)
         self.x = x[order]
         self.y = y[order]
-        self.mode = mode
+        self.mode = mode.lower()
+        assert self.mode in ['hist', 'linear'], \
+            'Invalid mode [\'hist\', \'linear\']'
         self.setup_curve(mode)
 
     def setup_curve(self, mode='linear'):
@@ -59,53 +62,57 @@ class Curve:
     def __setup_hist__(self):
         self.edges = (self.x[1:] + self.x[:-1]) / 2.
 
-    def __add__(self, other):
-        copy = deepcopy(self)
-        if isinstance(other, Curve):
-            assert len(self.x) == len(other.x), 'Only curves with same x ' \
-                                                'can be added.'
-            assert (self.x == other.x).all(), 'Only curves with same x ' \
-                                              'can be added.'
-            assert other.mode == self.mode, 'Only curves with same mode' \
-                                            'can be added'
+    def __calc_eval__(self, other):
+        x_combined = np.append(self.x, other.x)
+        x = np.sort(np.unique(x_combined))
+        y_1 = self(x)
+        y_2 = other(x)
+        return x, y_1, y_2
 
-            if self.mode == 'hist':
-                copy.y += other.y
-            elif self.mode == 'linear':
-                copy.slope += other.slope
-                copy.offset += other.offset
+    def __calc__(self, other, operation='add'):
+        if isinstance(other, float) or isinstance(other, int):
+            other = Curve(self.x, np.ones_like(self.y) * other)
+        elif isinstance(other, Curve):
+            pass
+        elif other is None:
+            return deepcopy(self)
         else:
-            copy = deepcopy(self)
-            value = float(other)
-            if self.mode == 'hist':
-                copy.y += value
-            elif self.mode == 'linear':
-                copy.offset += value
-        return copy
+            raise TypeError('Valid types [float, int, Curve]')
+        x, y_1, y_2 = self.__calc_eval__(other)
+        if operation == 'add' or operation == '+':
+            return Curve(x, y_1 + y_2, mode=self.mode)
+        elif operation == 'sub' or operation == '-':
+            return Curve(x, y_1 - y_2, mode=self.mode)
+        elif operation == 'mult' or operation == '*':
+            return Curve(x, y_1 * y_2, mode=self.mode)
+        elif operation == 'div' or operation == '/':
+            return Curve(x, y_1 / y_2, mode=self.mode)
+        else:
+            raise AttributeError('Valid operations [+, -, * , /]')
+
+    def __add__(self, other):
+        return self.__calc__(other, operation='+')
 
     def __sub__(self, other):
-        if isinstance(other, Curve):
-            assert len(self.x) == len(other.x), 'Only curves with same x ' \
-                                                'can be subtracted.'
-            assert (self.x == other.x).all(), 'Only curves with same x ' \
-                                              'can be subtracted.'
-            assert other.mode == self.mode, 'Only curves with same mode' \
-                                            'can be subtracted'
-        return self.__add__(other * (-1))
+        return self.__calc__(other, operation='-')
 
-    def __mul__(self, value):
-        value = float(value)
-        copy = deepcopy(self)
-        if self.mode == 'hist':
-            copy.y *= value
-        elif self.mode == 'linear':
-            copy.slope *= value
-            copy.offset *= value
-        return copy
+    def __mul__(self, other):
+        return self.__calc__(other, operation='*')
 
-    def __div__(self, value):
-        value = float(value)
-        return self.__mul__(1. / value)
+    def __truediv__(self, other):
+        return self.__calc__(other, operation='/')
+
+    def __iadd__(self, other):
+        return self.__calc__(other, operation='+')
+
+    def __isub__(self, other):
+        return self.__calc__(other, operation='-')
+
+    def __imul__(self, other):
+        return self.__calc__(other, operation='*')
+
+    def __itruediv__(self, other):
+        return self.__calc__(other, operation='/')
 
 
 class CurveSliding(Curve):
@@ -128,16 +135,29 @@ class CurveSliding(Curve):
         hist = stepwise, only input y are possible returns when evaluted
         linear = linear interpolation between neigbouring X values.
     """
-    def __init__(self, edges, y_input, mode='linear'):
-        self.mode = mode
+    def __init__(self,
+                 edges,
+                 y_input,
+                 mode='linear',
+                 combination_mode='single'):
+        self.combination_mode = combination_mode
+        self.mode = mode.lower()
+        assert self.mode in ['hist', 'linear'], \
+            'Invalid mode [\'hist\', \'linear\']'
+        assert self.combination_mode in ['overlapping', 'single'], \
+            'Invalid mode [\'overlapping\', \'single\']'
         self.x, self.y = self.setup_x_y(edges, y_input)
         self.setup_curve(mode)
 
     def setup_x_y(self, edges, y_input):
-        switch_points = np.sort(np.unique(edges))[:-1]
-        y_values = np.zeros_like(switch_points)
-        for i, x_i in enumerate(switch_points):
-            idx = np.logical_and(edges[:, 0] <= x_i,
-                                 edges[:, 1] > x_i)
-            y_values[i] = np.mean(y_input[idx])
-        return switch_points, y_values
+        if self.combination_mode == 'overlapping':
+            switch_points = np.sort(np.unique(edges))[:-1]
+            y_values = np.zeros_like(switch_points)
+            for i, x_i in enumerate(switch_points):
+                idx = np.logical_and(edges[:, 0] <= x_i,
+                                     edges[:, 1] > x_i)
+                y_values[i] = np.mean(y_input[idx])
+            return switch_points, y_values
+        elif self.combination_mode == 'single':
+            window_mids = (edges[:, 1] + edges[:, 0]) / 2.
+            return window_mids, y_input

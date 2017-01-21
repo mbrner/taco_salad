@@ -3,6 +3,10 @@ import os
 
 from taco_salad.toppings import ConfidenceCutter, criteria
 
+<<<<<<< HEAD
+=======
+from taco_salad.toppings import ConfidenceCutter, criteria
+>>>>>>> ab8093b9c37b3564c4541015d77922158bc4ab1e
 
 def generate(n, purity, x_lims=[-1., 1]):
     d = (-1) * (0.5 * np.sqrt(1 - purity)) / (np.sqrt(1 - purity) - np.sqrt(2))
@@ -114,7 +118,7 @@ def test_conf_cutter():
     conf_cutter.fit(X, y_true)
 
     x_cut_curve = np.linspace(-1., 1., 1000)
-    y_cut_curve = conf_cutter.cut_opts.cut_curve(x_cut_curve)
+    y_cut_curve = conf_cutter.cut_opts.curve(x_cut_curve)
 
     y_pred_conf = conf_cutter.predict(X)
     y_true_bool = np.array(y_true, dtype=bool)
