@@ -1,9 +1,8 @@
 import numpy as np
-from matplotlib import pyplot as plt
+import os
 
-from scipy.integrate import quad
+from taco_salad.toppings import ConfidenceCutter, criteria
 
-from toppings import ConfidenceCutter, criteria
 
 def generate(n, purity, x_lims=[-1., 1]):
     d = (-1) * (0.5 * np.sqrt(1 - purity)) / (np.sqrt(1 - purity) - np.sqrt(2))
@@ -24,13 +23,13 @@ def generate(n, purity, x_lims=[-1., 1]):
 def generate_lines(eff, pur, conf_cut, n_bkg=1, n_sig=1):
     B0_num = 2 * pur * n_bkg**2 + (2 * eff * pur - 2 * eff) * n_bkg * n_sig
     B0_den = conf_cut * np.sqrt(eff) * np.sqrt(1 - pur) * np.sqrt(pur) * \
-        np.sqrt(n_bkg) *  np.sqrt(n_sig) + (conf_cut * pur * n_bkg)
+        np.sqrt(n_bkg) * np.sqrt(n_sig) + (conf_cut * pur * n_bkg)
     B0 = B0_num / B0_den
 
     Bx_num = conf_cut * pur * n_bkg + conf_cut * \
         np.sqrt((eff * pur - eff * pur**2) * n_bkg * n_sig)
     Bx_den = (eff * pur - eff) * n_sig + pur * n_bkg
-    Bx = Bx_num/Bx_den
+    Bx = Bx_num / Bx_den
 
     Bm = -B0 / Bx
     Bb = B0
@@ -44,11 +43,8 @@ def generate_lines(eff, pur, conf_cut, n_bkg=1, n_sig=1):
     Sx_den = eff
     Sx = Sx_num / Sx_den
 
-    Sm = S0 / (1- Sx)
+    Sm = S0 / (1 - Sx)
     Sb = S0 * Sx / (Sx - 1)
-
-
-
     return Bm, Sm, Bb, Sb, Bx, Sx, B0, S0
 
 
@@ -61,7 +57,6 @@ def generate_x(n, eff, pur, conf_cut_func=lambda x: np.ones_like(x) * 0.5,
     Bm, Sm, Bb, Sb, Bx, Sx, B0, S0 = generate_lines(eff, pur, conf_cut)
 
     Sl = Sm / 2. * Sx**2 + Sb * Sx
-    Bl = 0.
 
     r = np.random.uniform(size=n)
     y_pred_S = -Sb / Sm + np.sqrt((Sb / Sm)**2 + 2 * (Sl + r) / Sm)
@@ -74,53 +69,15 @@ def generate_x(n, eff, pur, conf_cut_func=lambda x: np.ones_like(x) * 0.5,
     return x, y_pred, y_true
 
 
-
-
-
-if __name__ == '__main__':
-    from test_conf_cutter import generate
-    from matplotlib import pyplot as plt
-    import seaborn as sns
-
-    x_cut = 0.1
+def test_conf_cutter():
     eff = 0.90
     pur = 0.90
-    conf_cut_func = conf_cut_func=lambda x: (np.absolute(x) / 2.) + 0.25
-
-
-    def conf_cut_func(x):
-        if x < -0.5:
-            x_def = [-1., -0.5]
-            y_def = [0.3, 0.7]
-            m = (y_def[1] - y_def[0]) / (x_def[1] - x_def[0])
-            b = y_def[0] - x_def[0] * m
-            y = m * x + b
-        elif x < 0:
-            x_def = [-0.5, 0.]
-            y_def = [0.7, 0.5]
-            m = (y_def[1] - y_def[0]) / (x_def[1] - x_def[0])
-            b = y_def[0] - x_def[0] * m
-            y = m * x + b
-        elif x < 0.5:
-            x_def = [0., 0.5]
-            y_def = [0.5, 0.7]
-            m = (y_def[1] - y_def[0]) / (x_def[1] - x_def[0])
-            b = y_def[0] - x_def[0] * m
-            y = m * x + b
-        else:
-            x_def = [0.5, 1.]
-            y_def = [0.7, 0.3]
-            m = (y_def[1] - y_def[0]) / (x_def[1] - x_def[0])
-            b = y_def[0] - x_def[0] * m
-            y = m * x + b
-        return y
-
 
     def conf_cut_func(x):
         if x < -0.9:
             y = 0.5
         elif x < -0.1:
-            y = (np.sin((x+0.9)/0.8*2*np.pi)) / 3. + .5
+            y = (np.sin((x + 0.9) / 0.8 * 2 * np.pi)) / 3. + .5
         elif x < 0.:
             y = 0.5
         elif x < 0.5:
@@ -137,126 +94,52 @@ if __name__ == '__main__':
             y = m * x + b
         return y
 
-
-
-
-
     x, y_pred, y_true = generate_x(1000000, eff, pur, conf_cut_func)
     x_cut_true = np.linspace(-1, 1, 1000)
     y_cut_true = np.array([conf_cut_func(x_i) for x_i in x_cut_true])
 
-    crit = criteria.general_confusion_matrix_criteria('tp / (tp + fp)',
-                                                      threshold=0.95)
-    pur_crit = criteria.purity_criteria(threshold=0.90)
+    pur_treshold = 0.9
 
-    conf_cutter = ConfidenceCutter(n_steps=1,
-                                   window_size=2,
+    pur_crit = criteria.purity_criteria(threshold=pur_treshold)
+
+    conf_cutter = ConfidenceCutter(n_steps=100,
+                                   window_size=0.1,
                                    n_bootstraps=1,
                                    criteria=pur_crit,
                                    conf_index=1,
-                                   n_jobs=3)
+                                   n_jobs=1)
 
     X = np.vstack((x, y_pred)).T
 
     conf_cutter.fit(X, y_true)
 
-
     x_cut_curve = np.linspace(-1., 1., 1000)
     y_cut_curve = conf_cutter.cut_opts.cut_curve(x_cut_curve)
-
-
-    plt.hexbin(y_pred, x, gridsize=50, cmap=plt.cm.viridis)
-    plt.plot(y_cut_true, x_cut_true, '-', color='0.5', lw=5,
-             label='ToyMC Input')
-    plt.plot(y_cut_curve, x_cut_curve, '--', color='w', lw=5,
-             label='Confidence Cutter')
-    plt.xlabel('Classifier Score')
-    plt.ylabel('Observable')
-    plt.legend(loc='best', title='Purity 90%')
-    plt.xlim([0.,1.])
-    plt.ylim([-1, 1])
-    plt.savefig('conf_cutter_proof.png', dpi=200)
-    plt.clf()
-    conf_cutter.save_curve('test_curve')
 
     y_pred_conf = conf_cutter.predict(X)
     y_true_bool = np.array(y_true, dtype=bool)
     y_pred_bool = np.array(y_pred_conf, dtype=bool)
     tp = np.sum(y_true_bool[y_pred_bool])
     fp = np.sum(~y_true_bool[y_pred_bool])
-    print('Achieved Purity on a Train sample:')
-    print(tp / (tp + fp))
-    print('True Positive Rate:')
-    print(tp / np.sum(y_true_bool))
-    del conf_cutter
 
+    diff_cutter_truth = np.absolute(y_cut_true - y_cut_curve)
+    assert all(diff_cutter_truth <= 0.07)
 
-    conf_cutter_reloaded = ConfidenceCutter(curve_file='test_curve')
-    x, y_pred, y_true = generate_x(100000, eff, pur, conf_cut_func)
+    assert tp / (tp + fp) - pur_treshold < 0.07
 
-    conf_cutter_reloaded.conf_index = 0
-    X = np.vstack((y_pred, x)).T
-    y_pred_conf = conf_cutter_reloaded.predict(X)
-    y_true_bool = np.array(y_true, dtype=bool)
-    y_pred_bool = np.array(y_pred_conf, dtype=bool)
-    tp = np.sum(y_true_bool[y_pred_bool])
-    fp = np.sum(~y_true_bool[y_pred_bool])
-    print('Achieved Purity on a Test sample:')
-    print(tp / (tp + fp))
-    print('True Positive Rate:')
-    print(tp / np.sum(y_true_bool))
+    cut_curve_file = conf_cutter.save_curve('test_curve.npz')
+    conf_cutter_reloaded = ConfidenceCutter(curve_file=cut_curve_file)
+    os.remove(cut_curve_file)
+    y_reloaded_cutter = conf_cutter_reloaded.cut_opts.cut_curve(x_cut_curve)
+    assert all(y_reloaded_cutter == y_cut_curve)
 
-
-
-    pur_crit = criteria.purity_criteria(threshold=0.90)
-    conf_cutter_reloaded.criteria = pur_crit
-    naive_cut = conf_cutter_reloaded.__find_best_cut__(0, -1, 1, 0,
-                          X, y_true, None, n_points=10)
-
-    y_true_bool = np.array(y_true, dtype=bool)
-    y_pred_bool = np.array(y_pred >= naive_cut, dtype=bool)
-    tp = np.sum(y_true_bool[y_pred_bool])
-    fp = np.sum(~y_true_bool[y_pred_bool])
-    print('Achieved Purity for naive cut:')
-    print(tp / (tp + fp))
-    print('True Positive Rate:')
-    print(tp / np.sum(y_true_bool))
-
-    x_curves = np.linspace(-1, 1, 1000)
-    y_cut_true = np.array([conf_cut_func(x_i) for x_i in x_curves])
-    y_cut_curve = conf_cutter_reloaded.cut_opts.cut_curve(x_curves)
-    y_naive_cut = np.ones_like(x_curves) * naive_cut
-
-
-    plt.hexbin(y_pred, x, gridsize=50, cmap=plt.cm.plasma)
-    plt.plot(y_cut_true, x_curves, '-', color='0.5', lw=5,
-             label='ToyMC Input')
-    plt.plot(y_cut_curve, x_curves, '--', color='w', lw=5,
-             label='Confidence Cutter')
-
-    plt.plot(y_naive_cut, x_curves, '--', color='r', lw=5,
-             label='Straight Cut')
-    plt.xlabel('Classifier Score')
-    plt.ylabel('Observable')
-    plt.legend(loc='best', title='Purity 90%')
-    plt.xlim([0.,1.])
-    plt.ylim([-1, 1])
-    plt.savefig('conf_cutter_reloaded.png', dpi=200)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    gen_crit = criteria.general_confusion_matrix_criteria(
+        'tp / (tp + fp)',
+        threshold=pur_treshold)
+    y_true = [0, 0, 1, 1]
+    y_predict = [0, 1, 0, 1]
+    pos = 0.5
+    val_gen = gen_crit(y_true, y_predict, pos)
+    val_pur = pur_crit(y_true, y_predict, pos)
+    assert val_gen == val_pur
 

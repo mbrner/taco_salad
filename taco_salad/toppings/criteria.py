@@ -6,7 +6,8 @@ import numexpr as ne
 
 
 def purity_criteria(threshold=0.99):
-    """Returns decisison function which returns the absolute difference between the achieved and desired purity.
+    """Returns decisison function which returns the absolute difference
+    between the achieved and desired purity.
     Parameters
     ----------
     threshold : float or callable
@@ -24,7 +25,9 @@ def purity_criteria(threshold=0.99):
     if isinstance(threshold, float):
         if threshold > 1.:
             raise ValueError('Constant threshold must be <= 1')
-        threshold_func = lambda x: threshold
+
+        def threshold_func(x):
+            return threshold
     elif callable(threshold):
         threshold_func = threshold
     else:
@@ -105,7 +108,10 @@ def general_confusion_matrix_criteria(eval_str, threshold=0.99):
     if isinstance(threshold, float):
         if threshold > 1.:
             raise ValueError('Constant threshold must be <= 1')
-        threshold_func = lambda x: threshold
+
+        def threshold_func(x):
+            return threshold
+
     elif callable(threshold):
         threshold_func = threshold
     else:
@@ -160,27 +166,27 @@ def general_confusion_matrix_criteria(eval_str, threshold=0.99):
                 tp = np.sum(y_true_bool[y_pred_bool])
             else:
                 idx_tp = np.logical_and(y_true_bool, y_pred_bool)
-                tp = np.sum(sample_weights[idx_tp])
+                tp = np.sum(sample_weights[idx_tp]) # NOQA
 
         if calc_fp:
             if sample_weights is None:
                 fp = np.sum(~y_true_bool[y_pred_bool])
             else:
                 idx_fp = np.logical_and(~y_true_bool, y_pred_bool)
-                fp = np.sum(sample_weights[idx_fp])
+                fp = np.sum(sample_weights[idx_fp]) # NOQA
 
         if calc_tn:
             if sample_weights is None:
                 tn = np.sum(~y_true_bool[~y_pred_bool])
             else:
                 idx_tn = np.logical_and(~y_true_bool, ~y_pred_bool)
-                tn = np.sum(sample_weights[idx_tn])
+                tn = np.sum(sample_weights[idx_tn]) # NOQA
         if calc_fn:
             if sample_weights is None:
                 fn = np.sum(y_true_bool[~y_pred_bool])
             else:
                 idx_fn = np.logical_and(y_true_bool, ~y_pred_bool)
-                fn = np.sum(sample_weights[idx_fn])
+                fn = np.sum(sample_weights[idx_fn]) # NOQA
         criteria_value = ne.evaluate(eval_str)
         return np.absolute(criteria_value - float_criteria)
 

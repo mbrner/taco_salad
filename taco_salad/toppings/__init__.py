@@ -94,6 +94,7 @@ class ConfidenceCutter(object):
                  x=cut_curve.x,
                  y=cut_curve.y,
                  conf_index=self.conf_index)
+        return filename
 
     def load_curve(self, filename):
         """Function to load a fitted curve.
@@ -447,8 +448,6 @@ class ConfidenceCutter(object):
         cut_values_filled = self.fill_gaps(cut_values)
 
         return cut_values_filled
-
-
 
     def get_params():
         pass
