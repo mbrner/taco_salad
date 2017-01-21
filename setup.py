@@ -46,7 +46,8 @@ setup(
         'numpy',
         'matplotlib>=1.4',
         'scikit-learn>=0.18.1',
-        'scipy'],
+        'scipy',
+        'numexpr'],
     setup_requires=['pytest-runner'],
     tests_require=['pytest'],
 )
