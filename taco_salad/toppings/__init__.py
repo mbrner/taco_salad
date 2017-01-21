@@ -308,7 +308,6 @@ class ConfidenceCutter(object):
         assert X.shape[1] == 2, 'X must have the shape (n_events, 2)'
         assert len(y) == X.shape[0], 'len(X) and len(y) must be the same'
 
-
         if sample_weight is not None:
             assert len(y) == len(sample_weight), 'weights and y need the' \
                 'same length'
