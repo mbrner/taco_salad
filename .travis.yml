@@ -1,0 +1,13 @@
+language: python
+
+python:
+  - "3.5"
+
+install:
+  # pyflakes for general syntax check
+  - pip install flake8
+  - pip install .
+
+script:
+  - flake8 taco_salad
+  - python setup.py test
