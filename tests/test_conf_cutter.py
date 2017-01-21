@@ -133,6 +133,12 @@ def test_conf_cutter():
     y_reloaded_cutter = conf_cutter_reloaded.cut_opts.curve(x_cut_curve)
     assert all(y_reloaded_cutter == y_cut_curve)
 
+
+def test_criteria():
+    pur_treshold = 0.9
+
+    pur_crit = criteria.purity_criteria(threshold=pur_treshold)
+
     gen_crit = criteria.general_confusion_matrix_criteria(
         'tp / (tp + fp)',
         threshold=pur_treshold)
@@ -142,4 +148,3 @@ def test_conf_cutter():
     val_gen = gen_crit(y_true, y_predict, pos)
     val_pur = pur_crit(y_true, y_predict, pos)
     assert val_gen == val_pur
-
