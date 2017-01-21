@@ -3,10 +3,6 @@ import os
 
 from taco_salad.toppings import ConfidenceCutter, criteria
 
-<<<<<<< HEAD
-=======
-from taco_salad.toppings import ConfidenceCutter, criteria
->>>>>>> ab8093b9c37b3564c4541015d77922158bc4ab1e
 
 def generate(n, purity, x_lims=[-1., 1]):
     d = (-1) * (0.5 * np.sqrt(1 - purity)) / (np.sqrt(1 - purity) - np.sqrt(2))
@@ -134,7 +130,7 @@ def test_conf_cutter():
     cut_curve_file = conf_cutter.save_curve('test_curve.npz')
     conf_cutter_reloaded = ConfidenceCutter(curve_file=cut_curve_file)
     os.remove(cut_curve_file)
-    y_reloaded_cutter = conf_cutter_reloaded.cut_opts.cut_curve(x_cut_curve)
+    y_reloaded_cutter = conf_cutter_reloaded.cut_opts.curve(x_cut_curve)
     assert all(y_reloaded_cutter == y_cut_curve)
 
     gen_crit = criteria.general_confusion_matrix_criteria(
