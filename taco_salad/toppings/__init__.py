@@ -44,6 +44,12 @@ class ConfidenceCutter(object):
     curve_file : str, optional (default=None)
         File from which a fitted cut curve should be loaded.
 
+    random_state: None, int or RandomState
+        If int, random_state is the seed used by the random number generator;
+        If RandomState instance, random_state is the random number generator;
+        If None, the random number generator is the RandomState instance used
+        by np.random.
+
     Attributes
     ----------
     cut_opts : Object CutOpts
@@ -70,7 +76,8 @@ class ConfidenceCutter(object):
                  n_jobs=0,
                  curve_file=None,
                  combination_mode='overlapping',
-                 min_examples=10):
+                 min_examples=10,
+                 random_state=None):
         self.cut_opts = self.CutOpts(n_steps=n_steps,
                                      window_size=window_size,
                                      n_bootstraps=n_bootstraps,
@@ -83,6 +90,9 @@ class ConfidenceCutter(object):
         self.n_jobs = n_jobs
         if curve_file is not None:
             self.load_curve(curve_file)
+        if not isinstance(random_state, np.random.RandomState):
+            random_state = np.random.RandomState(random_state)
+        self.random_state = random_state
 
     def save_curve(self, filename):
         """Function to save a fitted curve. 'numpy.savez' is used to
@@ -331,7 +341,8 @@ class ConfidenceCutter(object):
             cut_values = np.zeros((len(self.cut_opts.positions),
                                    n_bootstraps))
             for i in range(self.cut_opts.n_bootstraps):
-                bootstrap = np.random.choice(n_events, n_events, replace=True)
+                bootstrap = self.random_state.choice(
+                    n_events, n_events, replace=True)
                 idx_bootstraps.append(np.sort(bootstrap))
             if self.n_jobs > 1:
                 n_jobs = min(self.n_jobs, self.cut_opts.n_bootstraps)
