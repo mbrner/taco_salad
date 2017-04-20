@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     conf_cutter.fit(X.T, y_train)
     x_curves = np.linspace(-2.2, 2.2, 1000)
-    y_cut_curve = conf_cutter.cut_opts.cut_curve(x_curves)
+    y_cut_curve = conf_cutter.cut_opts.curve(x_curves)
 
     plt.hexbin(conf, X_test[:, 0], gridsize=50, cmap=plt.cm.plasma)
     plt.plot(y_cut_curve, x_curves, '--', color='w', lw=5,
