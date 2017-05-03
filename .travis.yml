@@ -16,5 +16,5 @@ install:
   - pip install .
 
 script:
-  - flake8 tree_binning
+  - flake8 taco_salat
   - python setup.py test
