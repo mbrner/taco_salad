@@ -5,11 +5,29 @@ python:
   - "3.6"
   - "2.7"
 
+matrix:
+  include:
+    - python: 2.7
+      env: NUMPY=1.8 SCIPY=0.13
+
+notifications:
+  email: false
+
+before_install:
+ - travis_retry wget http://repo.continuum.io/miniconda/Miniconda-3.8.3-Linux-x86_64.sh -O miniconda.sh
+ - chmod +x miniconda.sh
+ - bash miniconda.sh -b -p $HOME/miniconda
+ - export PATH=/home/travis/miniconda/bin:$PATH
+ - conda update --yes conda
+
 install:
-  # pyflakes for general syntax check
-  - pip install flake8
-  - pip install .
+ - conda create --yes -n test python=$TRAVIS_PYTHON_VERSION
+ - source activate test
+ - conda install --yes numpy=$NUMPY scipy=$SCIPY matplotlib pip
+ - pip install setuptools
+ - pip install flake8
+ - python setup.py install
 
 script:
-  - flake8 taco_salad
+  - flake8 tree_binning
   - python setup.py test
