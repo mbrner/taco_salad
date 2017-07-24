@@ -336,7 +336,10 @@ class ConfidenceCutter(object):
         n_bootstraps = self.cut_opts.n_bootstraps
         if n_bootstraps is None or n_bootstraps <= 0:
             cut_values = self.__determine_cut_values_mp__(
-                X, y, sample_weight)
+                idx=None,
+                X_full=X,
+                y_full=y,
+                sample_weight_full=sample_weight)
         else:
             idx_bootstraps = []
             cut_values = np.zeros((len(self.cut_opts.positions),
@@ -350,32 +353,22 @@ class ConfidenceCutter(object):
                 with ThreadPoolExecutor(max_workers=n_jobs) as executor:
                     futures = []
                     for bootstrap in idx_bootstraps:
-                        X_i = X[bootstrap]
-                        y_i = y[bootstrap]
-                        if sample_weight is None:
-                            sample_weight_i = None
-                        else:
-                            sample_weight_i = sample_weight[bootstrap]
                         futures.append(executor.submit(
                             self.__determine_cut_values_mp__,
-                            X=X_i,
-                            y_true=y_i,
-                            sample_weight=sample_weight_i))
+                            idx=bootstrap,
+                            X_full=X,
+                            y_true_full=y,
+                            sample_weight_full=sample_weight))
                     results = wait(futures)
                 for i, future_i in enumerate(results.done):
                     cut_values[:, i] = future_i.result()
             else:
                 for i, bootstrap in enumerate(idx_bootstraps):
-                    X_i = X[bootstrap]
-                    y_i = y[bootstrap]
-                    if sample_weight is None:
-                        sample_weight_i = None
-                    else:
-                        sample_weight_i = sample_weight[bootstrap]
                     cut_values[:, i] = self.__determine_cut_values_mp__(
-                        X=X_i,
-                        y_true=y_i,
-                        sample_weight=sample_weight_i)
+                        idx=bootstrap,
+                        X_full=X,
+                        y_true_full=y,
+                        sample_weight_full=sample_weight)
         self.cut_opts.generate_cut_curve(cut_values)
         return self
 
@@ -459,7 +452,21 @@ class ConfidenceCutter(object):
                 cut_values[idx_first_nan + i] = value_before + (i + 1) * slope
         return cut_values
 
-    def __determine_cut_values_mp__(self, X, y_true, sample_weight):
+    def __determine_cut_values_mp__(self,
+                                    idx,
+                                    X_full,
+                                    y_true_full,
+                                    sample_weight_full):
+        if idx is None:
+            X = X_full
+            y_true = y_true_full
+            sample_weight = sample_weight_full
+        else:
+            X = X_full[idx]
+            y_true = y_true_full[idx]
+            if sample_weight_full is not None:
+                sample_weight = sample_weight_full[idx]
+
         edges = self.cut_opts.edges
         positions = self.cut_opts.positions
         n_points = 5
@@ -526,6 +533,21 @@ class ConfidenceCutter(object):
                                 'ConfidenceCutter]')
         return copy
 
+    def __div__(self, other):
+        copy = deepcopy(self)
+        if isinstance(other, ConfidenceCutter):
+            if copy.cut_opts.curve is None:
+                copy.cut_opts.curve /= deepcopy(other.cut_opts.curve)
+            else:
+                copy.cut_opts.curve /= other.cut_opts.curve
+        else:
+            try:
+                copy.cut_opts.curve /= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return copy
+
     def __truediv__(self, other):
         copy = deepcopy(self)
         if isinstance(other, ConfidenceCutter):
@@ -535,7 +557,7 @@ class ConfidenceCutter(object):
                 copy.cut_opts.curve /= other.cut_opts.curve
         else:
             try:
-                copy.cut_opts.curve += other
+                copy.cut_opts.curve /= other
             except TypeError:
                 raise TypeError('Valid types [float, int, Curve, '
                                 'ConfidenceCutter]')
@@ -578,6 +600,20 @@ class ConfidenceCutter(object):
         else:
             try:
                 self.cut_opts.curve *= other
+            except TypeError:
+                raise TypeError('Valid types [float, int, Curve, '
+                                'ConfidenceCutter]')
+        return self
+
+    def __idiv__(self, other):
+        if isinstance(other, ConfidenceCutter):
+            if self.cut_opts.curve is None:
+                self.cut_opts.curve = deepcopy(other.cut_opts.curve)
+            else:
+                self.cut_opts.curve /= other.cut_opts.curve
+        else:
+            try:
+                self.cut_opts.curve /= other
             except TypeError:
                 raise TypeError('Valid types [float, int, Curve, '
                                 'ConfidenceCutter]')

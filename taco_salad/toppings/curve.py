@@ -6,7 +6,7 @@ from copy import deepcopy
 import numpy as np
 
 
-class Curve:
+class Curve(object):
     """Class to treat a curve defined by a finite number ob (x, y) pairs
     as a continious y=f(x).
 
@@ -100,6 +100,9 @@ class Curve:
     def __mul__(self, other):
         return self.__calc__(other, operation='*')
 
+    def __div__(self, other):
+        return self.__calc__(other, operation='*')
+
     def __truediv__(self, other):
         return self.__calc__(other, operation='/')
 
@@ -111,6 +114,9 @@ class Curve:
 
     def __imul__(self, other):
         return self.__calc__(other, operation='*')
+
+    def __idiv__(self, other):
+        return self.__calc__(other, operation='/')
 
     def __itruediv__(self, other):
         return self.__calc__(other, operation='/')
