@@ -368,7 +368,7 @@ class ConfidenceCutter(object):
                         idx=bootstrap,
                         X_full=X,
                         y_true_full=y,
-                        sample_weight_full=sample_weight)
+                        sample_weight_full=sample_weights)
         self.cut_opts.generate_cut_curve(cut_values)
         return self
 
@@ -466,6 +466,8 @@ class ConfidenceCutter(object):
             y_true = y_true_full[idx]
             if sample_weight_full is not None:
                 sample_weight = sample_weight_full[idx]
+            else:
+                sample_weight = sample_weight_full
 
         edges = self.cut_opts.edges
         positions = self.cut_opts.positions
