@@ -127,6 +127,23 @@ class ConfidenceCutter(object):
         self.cut_opts.curve = curve
         self.conf_index = int(npzfile['conf_index'])
 
+    def init_curve(self, x, y, conf_index=0):
+        """Function to init a fitted curve with x, y.
+
+        Parameters
+        ----------
+        x : numpy.array
+            x positions curves
+        y : numpy.array
+            y postions of the curve
+        conf_index : int, optional
+            Index of the confidence_value
+
+        """
+        curve = Curve(x, y)
+        self.cut_opts.curve = curve
+        self.conf_index = int(conf_index)
+
     class CutOpts(object):
         """Class dealing with all settings of the sliding window.
 
