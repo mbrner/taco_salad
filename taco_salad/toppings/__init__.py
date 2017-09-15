@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, print_function, division
-from concurrent.futures import ThreadPoolExecutor, wait
 from copy import deepcopy
 
 import numpy as np
@@ -361,24 +360,45 @@ class ConfidenceCutter(object):
             idx_bootstraps = []
             cut_values = np.zeros((len(self.cut_opts.positions),
                                    n_bootstraps))
-            for i in range(self.cut_opts.n_bootstraps):
+            for i in range(n_bootstraps):
                 bootstrap = self.random_state.choice(
                     n_events, n_events, replace=True)
                 idx_bootstraps.append(np.sort(bootstrap))
             if self.n_jobs > 1:
-                n_jobs = min(self.n_jobs, self.cut_opts.n_bootstraps)
+                n_jobs = min(self.n_jobs, n_bootstraps)
+                import time
+                from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=n_jobs) as executor:
-                    futures = []
+
+                    def future_callback(future):
+                        if not future.cancelled():
+                            i = future_callback.finished
+                            cut_values[:, i] = future.result()
+                        else:
+                            raise RuntimeError('Subprocess crashed!')
+                        future_callback.finished += 1
+                        future_callback.running -= 1
+
+                    future_callback.running = 0
+                    future_callback.finished = 0
+
                     for bootstrap in idx_bootstraps:
-                        futures.append(executor.submit(
+                        future = executor.submit(
                             self.__determine_cut_values_mp__,
                             idx=bootstrap,
                             X_full=X,
                             y_true_full=y,
-                            sample_weight_full=sample_weight))
-                    results = wait(futures)
-                for i, future_i in enumerate(results.done):
-                    cut_values[:, i] = future_i.result()
+                            sample_weight_full=sample_weight)
+
+                        future.add_done_callback(future_callback)
+                        future_callback.running += 1
+                        while True:
+                            if future_callback.running < n_jobs:
+                                break
+                            else:
+                                time.sleep(1)
+                    while future_callback.finished < n_bootstraps:
+                        time.sleep(1)
             else:
                 for i, bootstrap in enumerate(idx_bootstraps):
                     cut_values[:, i] = self.__determine_cut_values_mp__(
